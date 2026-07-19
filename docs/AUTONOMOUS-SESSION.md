@@ -75,4 +75,4 @@ _(things I chose without asking; override any you disagree with)_
 
 ## Final status
 
-**All P1 features ported + two enhancements done, merged to `develop`.** No `src/` scaffold stubs remain. Tests: **unit 62, integration 15, all green.** Every commit is kkora-only. `master` remains locked (release is your call). Three narration engines available (System.Speech / espeak-ng / Piper-neural) behind one seam.
+**All P1 features ported + enhancements done, merged to `develop`.** No `src/` scaffold stubs remain. Tests: **unit 65, integration 15, all green.** Every commit is kkora-only. `master` remains locked (release is your call). Three narration engines available (System.Speech / espeak-ng / Piper-neural) behind one seam; the Piper engine auto-detects the classic vs. piper1-gpl CLI flag dialects (`chooseFlags`), and the install steps are in [guides/narrated-video.md](guides/narrated-video.md#installing-piper-neural).

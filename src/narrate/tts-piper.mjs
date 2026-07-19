@@ -8,6 +8,11 @@
 //   PIPER_BIN=/path/to/piper        (optional; defaults to `piper` on PATH)
 //   PIPER_VOICE=/path/to/voice.onnx (required; or pass the model path as the job voice)
 // Select it with AURIA_TTS=piper, or it is auto-preferred whenever PIPER_VOICE is set.
+//
+// Works with EITHER Piper build — the classic rhasspy/piper (`--output_file`,
+// `--length_scale`) or the newer piper1-gpl / pip `piper-tts` (`--output-file`,
+// `--length-scale`): synth reads `piper --help` once and picks the matching flags,
+// falling back to the universal short forms `-m` / `-f`.
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 
@@ -26,6 +31,25 @@ export function lengthScale(rate = 1) {
   return Math.max(0.5, Math.min(2.0, s));
 }
 
+// Pick the flag names this Piper build accepts, from its `--help` text. Prefer the
+// long forms present in the help; fall back to the short forms `-m` / `-f`, which BOTH
+// builds accept. Length-scale is omitted when neither spelling is advertised (Piper
+// then narrates at its default speed). Pure — unit-tested.
+export function chooseFlags(helpText = "") {
+  const has = s => helpText.includes(s);
+  return {
+    model: has("--model") ? "--model" : "-m",
+    output: has("--output_file") ? "--output_file" : has("--output-file") ? "--output-file" : "-f",
+    lengthScale: has("--length_scale") ? "--length_scale" : has("--length-scale") ? "--length-scale" : null,
+  };
+}
+
+// Combined stdout+stderr of `bin --help` ("" if the binary can't be run).
+function piperHelp(bin) {
+  try { const r = spawnSync(bin, ["--help"], { encoding: "utf8" }); return `${r.stdout || ""}${r.stderr || ""}`; }
+  catch { return ""; }
+}
+
 // True when a model is configured and the binary is runnable.
 export function isAvailable({ voice } = {}) {
   const { bin, model } = piperConfig({ voice });
@@ -39,12 +63,14 @@ export async function synth(lines, { voice, rate, outDir }) {
     "Piper needs a voice model: set PIPER_VOICE=/path/to/voice.onnx " +
     "(download from github.com/rhasspy/piper-voices), or pass the model path as the job voice.");
   const scale = lengthScale(rate);
+  const flags = chooseFlags(piperHelp(bin)); // detect the CLI dialect once per run
   const paths = [];
   for (let i = 0; i < lines.length; i++) {
     const file = path.join(outDir, `seg-${i}.wav`);
-    // Piper reads the utterance from stdin and writes a WAV to --output_file.
-    const res = spawnSync(bin, ["--model", model, "--output_file", file, "--length_scale", String(scale)],
-      { input: lines[i], encoding: "utf8" });
+    // Piper reads the utterance from stdin and writes a WAV to the output flag.
+    const args = [flags.model, model, flags.output, file];
+    if (flags.lengthScale) args.push(flags.lengthScale, String(scale));
+    const res = spawnSync(bin, args, { input: lines[i], encoding: "utf8" });
     if (res.status !== 0) throw new Error(`Piper TTS failed: ${res.stderr || res.error?.message || "unknown error"}`);
     paths.push(file);
   }
