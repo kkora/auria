@@ -45,3 +45,19 @@ test("runAudit: fail-on breaches when violations exist on the broken fixture", o
     await rm(out, { recursive: true, force: true });
   }
 });
+
+test("runAudit: --nvda surfaces install guidance when NVDA is unavailable", opts, async () => {
+  const out = path.join(os.tmpdir(), `auria-e2e-nvda-${process.pid}`);
+  const prev = process.env.GUIDEPUP_NVDA_UNAVAILABLE;
+  process.env.GUIDEPUP_NVDA_UNAVAILABLE = "1";
+  try {
+    await assert.rejects(
+      () => runAudit({ url: FIXTURE, out, name: "broken", video: false, pdf: false, nvda: true }),
+      e => /NVDA mode requested but not available/.test(e.message) && /npx @guidepup\/setup/.test(e.message),
+    );
+  } finally {
+    if (prev === undefined) delete process.env.GUIDEPUP_NVDA_UNAVAILABLE;
+    else process.env.GUIDEPUP_NVDA_UNAVAILABLE = prev;
+    await rm(out, { recursive: true, force: true });
+  }
+});
