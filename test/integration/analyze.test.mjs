@@ -10,6 +10,7 @@ import { runLayout, readViewportMeta } from "../../src/analyze/layout.mjs";
 import { runStrict } from "../../src/analyze/strict.mjs";
 import { runAxe } from "../../src/analyze/axe.mjs";
 import { walkTabOrder, detectKeyboardTrap } from "../../src/analyze/keyboard.mjs";
+import { readHeadings } from "../../src/analyze/headings.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE = pathToFileURL(path.join(HERE, "..", "fixtures", "broken-page.html")).href;
@@ -53,6 +54,15 @@ test("keyboard: walks tab order and finds no trap on the broken fixture", opts, 
   assert.ok(stops.every(s => typeof s.role === "string" && s.role.length > 0), "every stop has a role");
   const trap = await detectKeyboardTrap(page);
   assert.equal(trap.status, "pass");
+  await page.context().close();
+});
+
+test("headings: extracts the visible outline (fixture has one h2, no h1)", opts, async () => {
+  const page = await openFixture(browser, FIXTURE);
+  const headings = await readHeadings(page);
+  assert.equal(headings.length, 1, "fixture has a single visible heading");
+  assert.equal(headings[0].level, 2);
+  assert.ok(!headings.some(h => h.level === 1), "fixture deliberately has no h1");
   await page.context().close();
 });
 
