@@ -9,6 +9,7 @@ import { launchBrowser, openFixture, VIEWPORTS } from "../helpers/browser.mjs";
 import { runLayout, readViewportMeta } from "../../src/analyze/layout.mjs";
 import { runStrict } from "../../src/analyze/strict.mjs";
 import { runAxe } from "../../src/analyze/axe.mjs";
+import { walkTabOrder, detectKeyboardTrap } from "../../src/analyze/keyboard.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE = pathToFileURL(path.join(HERE, "..", "fixtures", "broken-page.html")).href;
@@ -42,6 +43,16 @@ test("axe: surfaces the image-alt violation on the broken fixture", opts, async 
   const all = Object.values(axe).flat();
   assert.ok(!all.some(v => v.id === "scan-failed"), "axe scan should not fail on a file:// fixture");
   assert.ok(all.some(v => v.id === "image-alt"), "expected the image-alt violation (fixture <img> has no alt)");
+  await page.context().close();
+});
+
+test("keyboard: walks tab order and finds no trap on the broken fixture", opts, async () => {
+  const page = await openFixture(browser, FIXTURE);
+  const stops = await walkTabOrder(page, { maxTabs: 10 });
+  assert.ok(stops.length >= 1, "expected at least one tab stop");
+  assert.ok(stops.every(s => typeof s.role === "string" && s.role.length > 0), "every stop has a role");
+  const trap = await detectKeyboardTrap(page);
+  assert.equal(trap.status, "pass");
   await page.context().close();
 });
 
