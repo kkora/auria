@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { launchBrowser, openFixture, VIEWPORTS } from "../helpers/browser.mjs";
 import { runLayout, readViewportMeta } from "../../src/analyze/layout.mjs";
+import { runStrict } from "../../src/analyze/strict.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE = pathToFileURL(path.join(HERE, "..", "fixtures", "broken-page.html")).href;
@@ -24,6 +25,13 @@ test("layout: detects horizontal overflow on the broken fixture", opts, async ()
 test("layout: broken fixture has no viewport meta (WCAG 1.4.10 signal)", opts, async () => {
   const page = await openFixture(browser, FIXTURE);
   assert.equal(await readViewportMeta(page), null);
+  await page.context().close();
+});
+
+test("strict: reflow320 reports overflow on the broken fixture", opts, async () => {
+  const page = await openFixture(browser, FIXTURE);
+  const strict = await runStrict(page);
+  assert.ok(strict.reflow320 > 0, "expected 320px reflow overflow");
   await page.context().close();
 });
 
