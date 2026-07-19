@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Cross-platform core: unit + integration analyzers (Linux, cross-platform TTS).
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      # Playwright drives an installed browser; install Chromium for CI.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:unit
+      - run: npm run test:integration
+
+  # Windows-native narration + NVDA availability paths.
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run test:unit
+      # TODO: add a Windows-TTS smoke test and the --nvda availability-probe test
+      #       (the latter self-skips when NVDA/guidepup is not installed).

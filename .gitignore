@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Audit output & artifacts
+a11y-audits/
+audits/
+*.mp4
+*.webm
+*.wav
+*-axe.json
+*-report.pdf
+*-report.md
+*-junit.xml
+*.sarif
+crawl-map.json
+_narration.wav
+_steps.json
+seg-*.wav
+
+# Logs & OS cruft
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Intentionally NO viewport meta -> WCAG 1.4.10 (mobile reflow) finding -->
+  <title>Deliberately Broken Fixture</title>
+  <style>
+    /* Force horizontal overflow -> 1.4.10 Reflow finding */
+    .wide { width: 2000px; height: 40px; background: #ccc; }
+    /* Text under 12px -> advisory tinyText finding */
+    .tiny { font-size: 9px; }
+    /* Sub-24px interactive target -> WCAG 2.5.8 finding */
+    .small-btn { width: 16px; height: 16px; padding: 0; }
+  </style>
+</head>
+<body>
+  <!-- No <h1> -> heading-structure / 1.3.1 finding -->
+  <h2>Section without a top-level heading</h2>
+
+  <div class="wide">This block is wider than any phone viewport.</div>
+
+  <p class="tiny">This paragraph is set below 12px.</p>
+
+  <!-- Unlabeled control -> axe 4.1.2 finding -->
+  <button class="small-btn"></button>
+
+  <!-- Image without alt -> axe 1.1.1 finding -->
+  <img src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==">
+
+  <a href="/next">A same-origin link for the crawler fixture.</a>
+</body>
+</html>

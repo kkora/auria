@@ -1,0 +1,48 @@
+{
+  "name": "auria",
+  "version": "0.1.0",
+  "description": "Accessibility + responsive-layout auditor: URL in -> narrated video, axe/layout/keyboard reports (MD/PDF/JSON/SARIF/JUnit), and dashboards out.",
+  "type": "module",
+  "bin": {
+    "auria": "bin/auria.mjs"
+  },
+  "main": "src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "assets",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node bin/auria.mjs",
+    "test": "node --test test/unit test/integration",
+    "test:unit": "node --test test/unit",
+    "test:integration": "node --test test/integration"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "accessibility",
+    "a11y",
+    "wcag",
+    "section-508",
+    "axe-core",
+    "audit",
+    "playwright",
+    "nvda",
+    "screen-reader",
+    "sarif"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@guidepup/guidepup": "^0.28.1",
+    "axe-core": "^4.10.0",
+    "ffmpeg-static": "^5.2.0",
+    "playwright-core": "^1.49.0"
+  }
+}

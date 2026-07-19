@@ -1,0 +1,9 @@
+{
+  "out": "audits",
+  "tabs": 6,
+  "screenshots": true,
+  "pages": [
+    { "url": "https://example.com/", "name": "example-home" },
+    { "url": "https://portal.ct.gov/", "name": "ct-portal-home" }
+  ]
+}

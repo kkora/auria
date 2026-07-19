@@ -1,0 +1,11 @@
+{
+  "out": "a11y-audits",
+  "format": "mp4",
+  "pdf": true,
+  "tabs": 10,
+  "pages": [
+    { "url": "https://web-staging.paymentportal.example.gov/transactions/abc123", "name": "payment-page", "tabs": 14 },
+    { "url": "https://web-staging.paymentportal.example.gov/receipt/abc123", "name": "receipt-page" },
+    { "url": "https://web-staging.paymentportal.example.gov/" }
+  ]
+}

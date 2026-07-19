@@ -1,0 +1,1053 @@
+#!/usr/bin/env node
+// a11y-video-audit — give it a URL (or a config file of pages); for each page it produces:
+//   <out>/<hostname>/<page>/<page>.mp4         narrated video: axe summary, layout checks,
+//                                              keyboard walk, desktop/tablet/phone sweep
+//   <out>/<hostname>/<page>/<page>-report.md   step-by-step script + full findings
+//   <out>/<hostname>/<page>/<page>-report.pdf  print-styled report (default on)
+//   <out>/<hostname>/<page>/<page>-axe.json    raw analysis data
+//
+// Usage:
+//   node a11y-video-audit.mjs <url> [--out <base>] [--name <page>] [--tabs <n>]
+//                                   [--format mp4|webm] [--no-pdf]
+//   node a11y-video-audit.mjs --config pages.json
+//
+// Requires: Windows (TTS via System.Speech), Edge or Chrome installed.
+
+import { readFile, writeFile, mkdir, unlink, readdir } from "node:fs/promises";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { chromium } from "playwright-core";
+import ffmpegPath from "ffmpeg-static";
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const VIEWPORTS = [
+  { label: "Desktop", w: 1280, h: 900 },
+  { label: "Tablet", w: 820, h: 1080 },
+  { label: "Phone", w: 375, h: 812 }
+];
+const SCROLL_MS = 7000;
+const LEAD_MS = 1400;
+
+// ---------- CLI ----------
+const args = process.argv.slice(2);
+const VALUE_FLAGS = new Set(["out", "name", "tabs", "format", "config", "color-scheme", "voice", "rate", "cookie", "header", "baseline", "fail-on", "max-pages", "max-depth"]);
+const IMPACT_RANK = { minor: 1, moderate: 2, serious: 3, critical: 4, unknown: 3 };
+const opt = k => { const i = args.indexOf(`--${k}`); return i >= 0 ? args[i + 1] : null; };
+const optAll = k => args.flatMap((a, i) => a === `--${k}` ? [args[i + 1]] : []).filter(Boolean);
+const positionals = [];
+for (let i = 0; i < args.length; i++) {
+  const a = args[i];
+  if (a.startsWith("--")) { if (VALUE_FLAGS.has(a.slice(2))) i++; }
+  else positionals.push(a);
+}
+
+// NVDA preflight: check if NVDA is available for narration
+async function nvdaPreflight() {
+  if (process.env.GUIDEPUP_NVDA_UNAVAILABLE === "1")
+    throw new Error("forced unavailable for tests");
+  const { nvda } = await import("@guidepup/guidepup");
+  await nvda.start();          // throws if NVDA/guidepup add-on is not installed
+  return nvda;
+}
+
+const slugify = s => s.replace(/^\/+|\/+$/g, "")
+  .replace(/\.[a-z0-9]+$/i, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "home";
+const slugFromUrl = u => slugify(new URL(u).pathname);
+
+const SKIP_EXT = /\.(pdf|zip|png|jpe?g|svg|webm|mp4|docx?|xlsx?)$/i;
+// Normalize for dedupe: absolute, hash stripped, trailing slash trimmed (root keeps "/").
+// Returns null for links a crawler must not follow.
+function normalizeUrl(href, base) {
+  let u;
+  try { u = new URL(href, base); } catch { return null; }
+  if (!/^(https?|file):$/.test(u.protocol)) return null;   // mailto:, tel:, javascript:
+  if (SKIP_EXT.test(u.pathname)) return null;
+  u.hash = "";
+  if (u.pathname !== "/" && u.pathname.endsWith("/")) u.pathname = u.pathname.slice(0, -1);
+  return u.toString();
+}
+const sameOrigin = (a, b) => { const A = new URL(a), B = new URL(b); return A.protocol === B.protocol && A.host === B.host; };
+async function collectLinks(page) {
+  return page.evaluate(() => [...document.querySelectorAll("a[href]")].map(a => a.getAttribute("href")));
+}
+
+// Build the job list: one entry per page. Config file wins over positional URL.
+let jobs = [];
+let crawlOpts = null;
+const configPath = opt("config");
+if (configPath) {
+  let cfg;
+  try { cfg = JSON.parse(await readFile(path.resolve(configPath), "utf8")); }
+  catch (e) { console.error(`Cannot read config ${configPath}: ${e.message}`); process.exit(1); }
+  const pages = cfg.pages || [];
+  if (!pages.length) { console.error("Config file has no `pages` array."); process.exit(1); }
+  for (const p of pages) {
+    if (!p.url) { console.error("Every config page needs a `url`."); process.exit(1); }
+    jobs.push({
+      url: p.url,
+      name: p.name,
+      tabs: p.tabs ?? cfg.tabs,
+      format: p.format ?? cfg.format,
+      pdf: p.pdf ?? cfg.pdf,
+      md: p.md ?? cfg.md,
+      video: p.video ?? cfg.video,
+      steps: p.steps,
+      viewports: p.viewports ?? cfg.viewports,
+      colorScheme: p.colorScheme ?? cfg.colorScheme,
+      reducedMotion: p.reducedMotion ?? cfg.reducedMotion,
+      voice: p.voice ?? cfg.voice,
+      rate: p.rate ?? cfg.rate,
+      auth: p.auth ?? cfg.auth,
+      baseline: p.baseline ?? cfg.baseline,
+      failOn: p.failOn ?? cfg.failOn,
+      screenshots: p.screenshots ?? cfg.screenshots,
+      sarif: p.sarif ?? cfg.sarif,
+      junit: p.junit ?? cfg.junit,
+      nvda: p.nvda ?? cfg.nvda,
+      out: cfg.out
+    });
+  }
+  crawlOpts = cfg.crawl || null;
+} else {
+  const url = positionals[0];
+  if (!url) {
+    console.error("Usage: node a11y-video-audit.mjs <url> [--out base] [--name page] [--tabs n] [--format mp4|webm] [--no-pdf] [--crawl] [--nvda]\n       node a11y-video-audit.mjs --config pages.json");
+    process.exit(1);
+  }
+  jobs.push({
+    url, name: opt("name"), tabs: opt("tabs"), format: opt("format"),
+    pdf: args.includes("--no-pdf") ? false : undefined,
+    md: args.includes("--md") ? true : undefined,
+    video: args.includes("--no-video") ? false : undefined,
+    colorScheme: opt("color-scheme") || undefined,
+    reducedMotion: args.includes("--reduced-motion") ? true : undefined,
+    voice: opt("voice") || undefined,
+    rate: opt("rate") || undefined,
+    auth: (optAll("cookie").length || optAll("header").length) ? {
+      cookies: optAll("cookie").join("; "),
+      headers: Object.fromEntries(optAll("header").map(h => {
+        const i = h.indexOf(":");
+        return [h.slice(0, i).trim(), h.slice(i + 1).trim()];
+      }))
+    } : undefined,
+    baseline: opt("baseline") || undefined,
+    failOn: opt("fail-on") || undefined,
+    screenshots: args.includes("--screenshots") ? true : undefined,
+    sarif: args.includes("--sarif") ? true : undefined,
+    junit: args.includes("--junit") ? true : undefined,
+    nvda: args.includes("--nvda") ? true : undefined,
+    out: opt("out")
+  });
+  if (args.includes("--crawl")) {
+    crawlOpts = { maxPages: opt("max-pages") ?? undefined, maxDepth: opt("max-depth") ?? undefined };
+  }
+}
+
+// ---------- crawl: expand the seed job into one job per discovered page ----------
+if (crawlOpts) {
+  const seed = jobs[0];
+  const { pages, failed } = await discoverPages(seed, crawlOpts);
+  console.log(`Crawl: ${pages.length} pages discovered${failed.length ? `, ${failed.length} unreachable` : ""} (maxPages ${crawlOpts.maxPages ?? 20}, maxDepth ${crawlOpts.maxDepth ?? 3})`);
+  const host = new URL(seed.url).hostname.replace(/[^a-z0-9.-]/gi, "_") || "site";
+  const mapDir = path.resolve(seed.out || "a11y-audits", host);
+  await mkdir(mapDir, { recursive: true });
+  await writeFile(path.join(mapDir, "crawl-map.json"),
+    JSON.stringify({ start: seed.url, date: new Date().toISOString().slice(0, 10), pages, failed }, null, 2));
+  // Crawl pages inherit the seed's options; name each by its path (file:// URLs
+  // relativized to cwd so local-fixture slugs stay short) — the seed's own name
+  // describes one page, not the whole discovered set.
+  jobs = pages.map(p => {
+    const parsed = new URL(p.url);
+    let src = parsed.pathname;
+    if (parsed.protocol === "file:") {
+      const rel = path.relative(process.cwd(), fileURLToPath(parsed)).replace(/\\/g, "/");
+      if (rel && !rel.startsWith("..")) src = rel;
+    }
+    return { ...seed, url: p.url, name: slugify(src) };
+  });
+}
+
+const axeSource = await readFile(path.join(HERE, "node_modules", "axe-core", "axe.min.js"), "utf8");
+
+// Setup steps from the config put the page into the state to audit
+// (e.g. select a payment method, submit empty to surface validation errors).
+async function applySteps(page, steps) {
+  for (const s of steps || []) {
+    try {
+      if (s.click) await page.click(s.click, { timeout: 5000 });
+      else if (s.fill) await page.fill(s.fill, s.value ?? "", { timeout: 5000 });
+      else if (s.select) await page.selectOption(s.select, s.value ?? "", { timeout: 5000 });
+      else if (s.focus) await page.focus(s.focus, { timeout: 5000 });
+      else if (s.press) await page.keyboard.press(s.press);
+      if (s.wait) await page.waitForTimeout(s.wait);
+    } catch (e) { console.error(`  setup step failed ${JSON.stringify(s)}: ${e.message}`); }
+  }
+  if (steps?.length) await page.waitForTimeout(400);
+}
+
+// Auth: cookies as "n=v; n2=v2" or [{name, value, domain?, path?}]; headers as {Name: value}.
+// Values never appear in reports — only counts.
+function normalizeAuth(auth, url) {
+  if (!auth) return { cookies: [], headers: {} };
+  let cookies = [];
+  if (typeof auth.cookies === "string") {
+    cookies = auth.cookies.split(";").map(s => s.trim()).filter(Boolean).map(s => {
+      const i = s.indexOf("=");
+      return { name: s.slice(0, i).trim(), value: s.slice(i + 1).trim(), url };
+    });
+  } else if (Array.isArray(auth.cookies)) {
+    cookies = auth.cookies.map(c => (c.domain || c.url) ? c : { ...c, url });
+  }
+  return { cookies, headers: auth.headers || {} };
+}
+
+// BFS from the seed job's URL. Uses its own short-lived browser so the crawl
+// respects the same auth/emulation the audits will use.
+async function discoverPages(seed, crawl) {
+  const maxPages = Number(crawl.maxPages ?? 20);
+  const maxDepth = Number(crawl.maxDepth ?? 3);
+  const inc = crawl.include ? new RegExp(crawl.include) : null;
+  const exc = crawl.exclude ? new RegExp(crawl.exclude) : null;
+  const auth = normalizeAuth(seed.auth, seed.url);
+  let browser = null;
+  for (const channel of ["msedge", "chrome"]) {
+    try { browser = await chromium.launch({ channel }); break; } catch {}
+  }
+  if (!browser) throw new Error("Neither Edge nor Chrome is available.");
+  const start = normalizeUrl(seed.url, seed.url);
+  const seen = new Set([start]);
+  const pages = [], failed = [];
+  const queue = [{ url: start, depth: 0 }];
+  try {
+    const ctx = await browser.newContext(Object.keys(auth.headers).length ? { extraHTTPHeaders: auth.headers } : {});
+    if (auth.cookies.length) await ctx.addCookies(auth.cookies);
+    while (queue.length && pages.length < maxPages) {
+      const { url, depth } = queue.shift();
+      // A fresh page per URL avoids a failed goto's internal error-page
+      // navigation racing with (and interrupting) the next goto.
+      const page = await ctx.newPage();
+      try {
+        await page.goto(url, { waitUntil: "load", timeout: 30000 });
+      } catch (e) {
+        failed.push({ url, error: e.message.split("\n")[0] });
+        await page.close().catch(() => {});
+        continue;
+      }
+      pages.push({ url, depth });
+      // The page loaded, so it stays audited; only its link discovery is
+      // best-effort — a throw here (context destroyed, page crashed) skips
+      // just this page's links, never aborting the whole crawl.
+      if (depth < maxDepth) {
+        try {
+          for (const href of await collectLinks(page)) {
+            const n = normalizeUrl(href, url);
+            if (!n || seen.has(n) || !sameOrigin(n, start)) continue;
+            if (inc && !inc.test(n)) continue;
+            if (exc && exc.test(n)) continue;
+            seen.add(n);
+            queue.push({ url: n, depth: depth + 1 });
+          }
+        } catch (e) {
+          console.error(`  crawl: link discovery failed on ${url}: ${e.message.split("\n")[0]}`);
+        }
+      }
+      await page.close().catch(() => {});
+    }
+    await ctx.close();
+  } finally { await browser.close().catch(() => {}); }
+  return { pages, failed };
+}
+
+const describeStep = s =>
+  s.click ? `Click \`${s.click}\`` :
+  s.fill ? `Fill \`${s.fill}\` with "${s.value ?? ""}"` :
+  s.select ? `Select "${s.value ?? ""}" in \`${s.select}\`` :
+  s.focus ? `Focus \`${s.focus}\`` :
+  s.press ? `Press ${s.press}` :
+  s.wait ? `Wait ${s.wait}ms` : JSON.stringify(s);
+
+// ---------- per-page audit ----------
+async function runAudit(job) {
+  const format = (job.format || "mp4").toLowerCase();
+  if (!["webm", "mp4"].includes(format)) throw new Error(`format must be webm or mp4, got "${format}"`);
+  const wantPdf = job.pdf !== false;
+  const wantMd = job.md === true;   // markdown report is opt-in; PDF renders from the in-memory report either way
+  const wantVideo = job.video !== false;
+  const maxTabs = Number(job.tabs || 25);
+  // Custom viewport list from the config; falls back to desktop/tablet/phone.
+  const viewports = Array.isArray(job.viewports) && job.viewports.length
+    ? job.viewports.map(v => ({ label: v.label || `${v.w}×${v.h}`, w: Number(v.w), h: Number(v.h) }))
+    : VIEWPORTS;
+  // Media emulation: audit the dark theme / reduced-motion experience.
+  const emu = {};
+  if (job.colorScheme) {
+    if (!["dark", "light"].includes(job.colorScheme)) throw new Error(`colorScheme must be dark or light, got "${job.colorScheme}"`);
+    emu.colorScheme = job.colorScheme;
+  }
+  if (job.reducedMotion) emu.reducedMotion = "reduce";
+  const auth = normalizeAuth(job.auth, job.url);
+  if (Object.keys(auth.headers).length) emu.extraHTTPHeaders = auth.headers;
+  const host = new URL(job.url).hostname.replace(/[^a-z0-9.-]/gi, "_") || "site";
+  const name = (job.name || slugFromUrl(job.url)).replace(/[^a-z0-9._-]/gi, "-");
+  const outDir = path.resolve(job.out || "a11y-audits", host, name);
+  await mkdir(outDir, { recursive: true });
+
+  let browser = null;
+  for (const channel of ["msedge", "chrome"]) {
+    try { browser = await chromium.launch({ channel, headless: !job.nvda ? undefined : false }); break; } catch {}
+  }
+  if (!browser) throw new Error("Neither Edge nor Chrome is available.");
+
+  let nvdaDriver = null;
+  try {
+    // NVDA preflight: load and start the screen reader if requested
+    if (job.nvda) {
+      try { nvdaDriver = await nvdaPreflight(); }
+      catch (e) {
+        throw new Error(`NVDA mode requested but not available: ${e.message}. ` +
+          `Install NVDA (nvaccess.org) and run: npx @guidepup/setup`);
+      }
+    }
+
+    // ---------- phase A: analyze ----------
+    const analysis = { url: job.url, date: new Date().toISOString().slice(0, 10), axe: {}, headings: [], tabStops: [], title: "" };
+    {
+      const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, ...emu });
+      if (auth.cookies.length) await ctx.addCookies(auth.cookies);
+      const page = await ctx.newPage();
+      await page.goto(job.url, { waitUntil: "load", timeout: 45000 });
+      await page.waitForTimeout(1500);
+      await applySteps(page, job.steps);
+
+      // Record what the page actually sees, as proof the emulation took effect.
+      analysis.emulation = await page.evaluate(() => ({
+        prefersDark: matchMedia("(prefers-color-scheme: dark)").matches,
+        prefersReducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches
+      }));
+
+      analysis.title = await page.title();
+      analysis.headings = await page.evaluate(() =>
+        [...document.querySelectorAll("h1,h2,h3,h4,h5,h6")]
+          .filter(h => h.offsetParent !== null)
+          .map(h => ({ level: +h.tagName[1], text: h.textContent.trim().replace(/\s+/g, " ").slice(0, 80) })));
+
+      // axe at the widest and narrowest audited widths
+      for (const vp of [viewports[0], viewports[viewports.length - 1]]) {
+        await page.setViewportSize({ width: vp.w, height: vp.h });
+        await page.waitForTimeout(400);
+        try {
+          await page.addScriptTag({ content: axeSource });
+          const res = await page.evaluate(async () => await axe.run(document, { resultTypes: ["violations"] }));
+          analysis.axe[vp.label] = res.violations.map(v => ({
+            id: v.id, impact: v.impact, help: v.help,
+            wcag: v.tags.filter(t => /^wcag\d/.test(t)),
+            nodes: v.nodes.map(n => n.target.join(" ")).slice(0, 10)
+          }));
+        } catch (e) {
+          analysis.axe[vp.label] = [{ id: "scan-failed", impact: "unknown", help: `axe could not run (likely CSP): ${e.message}`, wcag: [], nodes: [] }];
+        }
+      }
+
+      // layout / responsive checks at every viewport
+      analysis.viewportMeta = await page.evaluate(() =>
+        document.querySelector('meta[name="viewport"]')?.getAttribute("content") || null);
+      analysis.layout = {};
+      for (const vp of viewports) {
+        await page.setViewportSize({ width: vp.w, height: vp.h });
+        await page.waitForTimeout(500);
+        analysis.layout[vp.label] = await page.evaluate(() => {
+          const short = el => {
+            const t = el.tagName.toLowerCase();
+            if (el.id) return `${t}#${el.id}`;
+            const c = [...el.classList][0];
+            return c ? `${t}.${c}` : t;
+          };
+          const vw = document.documentElement.clientWidth;
+          const overflowPx = Math.max(0, document.documentElement.scrollWidth - vw);
+          const overflowing = [], smallTargets = [], tinyText = [];
+          const els = [...document.querySelectorAll("body *")].slice(0, 4000);
+          for (const el of els) {
+            const r = el.getBoundingClientRect();
+            if (r.width <= 1 && r.height <= 1) continue; // visually-hidden (SR-only) technique
+            const st = getComputedStyle(el);
+            if (st.visibility === "hidden" || st.display === "none") continue;
+            if (r.right > vw + 1 || r.left < -1)
+              overflowing.push({ el: short(el), px: Math.round(Math.max(r.right - vw, -r.left)) });
+            if (el.matches("a,button,select,textarea,input:not([type=hidden]),[role=button],[role=link]")
+                && (r.width < 24 || r.height < 24))
+              smallTargets.push({ el: short(el), size: `${Math.round(r.width)}×${Math.round(r.height)}` });
+            if (parseFloat(st.fontSize) < 12
+                && [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()))
+              tinyText.push({ el: short(el), px: Math.round(parseFloat(st.fontSize)) });
+          }
+          const dedup = (arr, key) => [...new Map(arr.map(x => [x.el, x])).values()]
+            .sort((a, b) => (b[key] || 0) - (a[key] || 0)).slice(0, 8);
+          return {
+            overflowPx,
+            overflowing: dedup(overflowing, "px"),
+            smallTargets: dedup(smallTargets, ""),
+            tinyText: dedup(tinyText, "")
+          };
+        });
+      }
+
+      // Annotated screenshots: one full-page shot per viewport with every
+      // known offender (axe nodes + layout findings) outlined in red.
+      analysis.screenshots = [];
+      if (job.screenshots) {
+        const axeSelectors = Object.values(analysis.axe).flat().flatMap(v => v.nodes || []);
+        for (const vp of viewports) {
+          await page.setViewportSize({ width: vp.w, height: vp.h });
+          await page.waitForTimeout(400);
+          const L = analysis.layout[vp.label] || {};
+          const selectors = [...new Set([
+            ...axeSelectors,
+            ...(L.overflowing || []).map(o => o.el),
+            ...(L.smallTargets || []).map(s => s.el),
+            ...(L.tinyText || []).map(t => t.el)
+          ])];
+          const marked = await page.evaluate(sels => {
+            const style = document.createElement("style");
+            style.id = "__audit_mark_style";
+            style.textContent = ".__audit_mark{outline:3px solid #E4002B !important;outline-offset:2px !important}";
+            document.head.appendChild(style);
+            let n = 0;
+            for (const s of sels) {
+              try { document.querySelectorAll(s).forEach(el => { el.classList.add("__audit_mark"); n++; }); } catch {}
+            }
+            return n;
+          }, selectors);
+          const shotFile = `${name}-${vp.label.replace(/[^a-z0-9]+/gi, "-")}.png`;
+          await page.screenshot({ path: path.join(outDir, shotFile), fullPage: true });
+          await page.evaluate(() => {
+            document.getElementById("__audit_mark_style")?.remove();
+            document.querySelectorAll(".__audit_mark").forEach(el => el.classList.remove("__audit_mark"));
+          });
+          analysis.screenshots.push({ file: shotFile, viewport: vp.label, marked });
+        }
+      }
+
+      // WCAG-strict checks. 1.4.10 Reflow is defined at exactly 320 CSS px;
+      // the 200% zoom pass (1280 -> 640px equivalent) approximates 1.4.4.
+      analysis.strict = {};
+      await page.setViewportSize({ width: 320, height: 800 });
+      await page.waitForTimeout(500);
+      analysis.strict.reflow320 = await page.evaluate(() =>
+        Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth));
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.waitForTimeout(300);
+      analysis.strict.zoom200 = await page.evaluate(async () => {
+        document.documentElement.style.zoom = "2";
+        await new Promise(r => setTimeout(r, 400));
+        const overflow = Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth);
+        document.documentElement.style.zoom = "";
+        await new Promise(r => setTimeout(r, 200));
+        return overflow;
+      });
+
+      // keyboard walk
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.evaluate(() => { document.activeElement?.blur?.(); window.scrollTo(0, 0); });
+      if (nvdaDriver) await page.bringToFront();
+      for (let i = 0; i < maxTabs; i++) {
+        let nvdaPhrase = null;
+        if (nvdaDriver) {
+          await nvdaDriver.clearSpokenPhraseLog();
+          await nvdaDriver.press("Tab");            // NVDA presses the key → speech reflects real focus
+          await page.waitForTimeout(600);           // let speech settle
+          nvdaPhrase = (await nvdaDriver.spokenPhraseLog()).join(" ").replace(/\s+/g, " ").trim() || null;
+          if (nvdaPhrase != null && nvdaPhrase.length > 300) nvdaPhrase = `${nvdaPhrase.slice(0, 300)}…`;
+        } else {
+          await page.keyboard.press("Tab");
+        }
+        const info = await page.evaluate(() => {
+          const el = document.activeElement;
+          if (!el || el === document.body) return null;
+          const byId = id => document.getElementById(id)?.textContent.trim();
+          let nm = el.getAttribute("aria-label")
+            || (el.getAttribute("aria-labelledby") || "").split(/\s+/).map(byId).filter(Boolean).join(" ")
+            || (el.id && document.querySelector(`label[for="${el.id}"]`)?.textContent.trim())
+            || (/^(BUTTON|A|SUMMARY)$/.test(el.tagName) && el.textContent.trim())
+            || el.getAttribute("alt") || el.getAttribute("title") || el.getAttribute("placeholder") || "";
+          const role = el.getAttribute("role")
+            || ({ A: "link", BUTTON: "button", SELECT: "combo box", TEXTAREA: "edit" }[el.tagName]
+            || (el.tagName === "INPUT" ? ({ radio: "radio button", checkbox: "check box", submit: "button" }[el.type] || "edit") : el.tagName.toLowerCase()));
+          const req = el.getAttribute("aria-required") === "true" || el.required ? ", required" : "";
+          return { name: nm.replace(/\s+/g, " ").slice(0, 70), role: role + req };
+        });
+        if (!info) break;
+        if (analysis.tabStops.length && analysis.tabStops[0].name === info.name && analysis.tabStops[0].role === info.role) break;
+        analysis.tabStops.push({ ...info, ...(nvdaPhrase != null && { nvda: nvdaPhrase }) });
+      }
+      analysis.nvdaUsed = !!nvdaDriver;
+      if (analysis.nvdaUsed && !analysis.tabStops.length)
+        throw new Error("NVDA walk captured no tab stops — the browser window likely lost OS focus during the walk. Keep the headed browser window foreground while --nvda runs.");
+
+      // Keyboard-trap detection (WCAG 2.1.2): tab through the whole page; if
+      // focus stops moving on one element, keyboard users are stuck there.
+      await page.evaluate(() => { document.activeElement?.blur?.(); window.scrollTo(0, 0); });
+      const focusSig = () => page.evaluate(() => {
+        const el = document.activeElement;
+        if (!el || el === document.body) return "BODY";
+        const idx = [...document.querySelectorAll(el.tagName)].indexOf(el);
+        return `${el.tagName.toLowerCase()}${el.id ? "#" + el.id : ""}@${idx}`;
+      });
+      {
+        let first = null, prev = null, same = 0, total = 0, trapAt = null;
+        for (let i = 0; i < 300; i++) {
+          await page.keyboard.press("Tab");
+          const s = await focusSig();
+          total++;
+          if (s === prev) {
+            // Repeats never count as a completed cycle — a trapped element
+            // can be the first stop when tabbing resumes mid-page.
+            same++;
+            if (same >= 3) { trapAt = s; break; }
+            continue;
+          }
+          same = 0;
+          if (i === 0) first = s;
+          else if (s === first || s === "BODY") break; // full cycle completed
+          prev = s;
+        }
+        analysis.keyboardTrap = trapAt
+          ? { status: "trap", at: trapAt, stops: total }
+          : { status: "pass", stops: total };
+      }
+      await ctx.close();
+    }
+
+    // ---------- baseline diff ----------
+    // "auto"/true compares against this page's previous axe.json (read before
+    // this run overwrites it); a path compares against that file.
+    let diff = null;
+    const baselinePath = (job.baseline === true || job.baseline === "auto")
+      ? path.join(outDir, `${name}-axe.json`)
+      : job.baseline ? path.resolve(job.baseline) : null;
+    if (baselinePath) {
+      try {
+        const prev = JSON.parse(await readFile(baselinePath, "utf8"));
+        const flat = a => Object.entries(a.axe || {}).flatMap(([state, list]) =>
+          list.map(v => ({ key: `${state}|${v.id}|${(v.nodes || []).join(",")}`, state, v })));
+        const prevMap = new Map(flat(prev).map(x => [x.key, x]));
+        const curMap = new Map(flat(analysis).map(x => [x.key, x]));
+        diff = {
+          baselineDate: prev.date || "unknown",
+          added: [...curMap.values()].filter(x => !prevMap.has(x.key)),
+          fixed: [...prevMap.values()].filter(x => !curMap.has(x.key)),
+          unchanged: [...curMap.values()].filter(x => prevMap.has(x.key)).length
+        };
+        console.log(`  baseline (${diff.baselineDate}): +${diff.added.length} new, -${diff.fixed.length} fixed, ${diff.unchanged} unchanged`);
+      } catch (e) { console.error(`  baseline unreadable (${baselinePath}): ${e.message}`); }
+    }
+
+    // ---------- narration + action plan ----------
+    const plan = [];
+    const say = (text, pad = 700, action = null) => plan.push({ text, pad, action });
+
+    say(analysis.nvdaUsed
+      ? `Accessibility review of ${analysis.title || host}. Keyboard announcements in this video are the real output of the NVDA screen reader, re-voiced by synthesized speech.`
+      : `Accessibility and layout review of ${analysis.title || host}. This narration is simulated: a synthesized voice reads the page's accessibility markup and automated test results. It is not a real screen reader.`, 800);
+
+    for (const vpLabel of Object.keys(analysis.axe)) {
+      const v = analysis.axe[vpLabel];
+      if (!v.length) say(`The automated axe scan at ${vpLabel} width found zero violations.`);
+      else say(`The automated axe scan at ${vpLabel} width found ${v.length} violation${v.length > 1 ? "s" : ""}: ${v.slice(0, 3).map(x => x.id.replace(/-/g, " ")).join("; ")}${v.length > 3 ? "; and more" : ""}.`, 900);
+    }
+
+    if (diff)
+      say(`Compared with the baseline from ${diff.baselineDate}: ${diff.added.length} new violation${diff.added.length === 1 ? "" : "s"}, ${diff.fixed.length} fixed, ${diff.unchanged} unchanged.`, 800);
+
+    const h1 = analysis.headings.find(h => h.level === 1);
+    say(h1
+      ? `The page has ${analysis.headings.length} headings. The main heading is: ${h1.text}.`
+      : `The page has ${analysis.headings.length} headings, but no level-one heading — screen reader users lose their main anchor.`, 800);
+
+    say(`Now walking the keyboard order. Each press of Tab is announced the way a screen reader would.`, 500);
+    analysis.tabStops.forEach(s =>
+      say(analysis.nvdaUsed
+        ? `Tab. NVDA says: ${s.nvda || "nothing — silence on this stop"}.`
+        : `Tab. ${s.name || "unnamed element"}, ${s.role}.${s.name ? "" : " An unnamed control is a WCAG 4.1.2 failure."}`,
+        400, { type: "tab" }));
+
+    if (!analysis.viewportMeta)
+      say(`Warning: the page has no viewport meta tag, so it will not reflow on mobile devices. This fails WCAG 1.4.10, reflow.`, 800);
+
+    say(`Strict reflow checks. At exactly 320 pixels wide, ${analysis.strict.reflow320
+      ? `content overflows by ${analysis.strict.reflow320} pixels — failing WCAG 1.4.10`
+      : `the page reflows with no horizontal scrolling`}. At 200 percent zoom, ${analysis.strict.zoom200
+      ? `content overflows by ${analysis.strict.zoom200} pixels`
+      : `the layout holds with no horizontal scrolling`}.`, 800);
+
+    say(analysis.keyboardTrap.status === "trap"
+      ? `Keyboard trap detected: after ${analysis.keyboardTrap.stops} tab presses, focus is stuck on ${analysis.keyboardTrap.at.replace(/[#@]/g, " ")}. This fails WCAG 2.1.2, no keyboard trap.`
+      : `No keyboard trap: focus moved freely through all ${analysis.keyboardTrap.stops} tab stops.`, 700);
+
+    for (const vp of viewports) {
+      const L = analysis.layout[vp.label];
+      const verdict = [];
+      verdict.push(L.overflowPx > 1
+        ? `Horizontal overflow of ${L.overflowPx} pixels — content is wider than the screen`
+        : `No horizontal scrolling`);
+      if (L.smallTargets.length)
+        verdict.push(`${L.smallTargets.length} interactive target${L.smallTargets.length > 1 ? "s" : ""} smaller than the 24 pixel minimum`);
+      else if (vp.label === "Phone")
+        verdict.push(`all interactive targets meet the 24 pixel minimum`);
+      if (L.tinyText.length) verdict.push(`${L.tinyText.length} element${L.tinyText.length > 1 ? "s" : ""} with text under 12 pixels`);
+      say(`${vp.label} layout, ${vp.w} by ${vp.h}. ${verdict.join(". ")}. Scrolling the full page.`, SCROLL_MS, { type: "layout", vp });
+    }
+    say(`End of review. Full findings are in the accompanying report.`, 1200);
+
+    // ---------- video: narrate, record, mux (skipped with --no-video) ----------
+    let outVideo = null, seconds = null;
+    if (wantVideo) {
+    const stepsJson = path.join(outDir, "_steps.json");
+    await writeFile(stepsJson, JSON.stringify(plan.map(p => p.text)));
+    const ps = spawnSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass",
+      "-File", path.join(HERE, "gen-voice.ps1"), stepsJson, outDir,
+      ...(job.voice ? ["-Voice", job.voice] : []),
+      ...(job.rate != null ? ["-Rate", String(job.rate)] : [])], { encoding: "utf8" });
+    if (ps.status !== 0) throw new Error(`TTS failed: ${ps.stderr}`);
+
+    const parseWav = buf => {
+      let off = 12, fmt = null, data = null;
+      while (off < buf.length) {
+        const id = buf.toString("ascii", off, off + 4), size = buf.readUInt32LE(off + 4);
+        if (id === "fmt ") fmt = { channels: buf.readUInt16LE(off + 10), sampleRate: buf.readUInt32LE(off + 12), byteRate: buf.readUInt32LE(off + 16), bits: buf.readUInt16LE(off + 22) };
+        if (id === "data") data = buf.subarray(off + 8, off + 8 + size);
+        off += 8 + size + (size % 2);
+      }
+      return { fmt, data, durMs: (data.length / fmt.byteRate) * 1000 };
+    };
+    const segs = [];
+    for (let i = 0; i < plan.length; i++) segs.push(parseWav(await readFile(path.join(outDir, `seg-${i}.wav`))));
+    const fmt = segs[0].fmt;
+
+    let t = LEAD_MS;
+    const schedule = plan.map((p, i) => { const s = { start: t, ...p }; t += Math.ceil(segs[i].durMs) + p.pad; return s; });
+    const TOTAL = t + 1500;
+
+    const chunks = []; let cursor = 0;
+    const silence = ms => Buffer.alloc(Math.max(0, Math.round((ms / 1000) * fmt.byteRate)) & ~1);
+    schedule.forEach((s, i) => { chunks.push(silence(s.start - cursor), segs[i].data); cursor = s.start + segs[i].durMs; });
+    chunks.push(silence(TOTAL - cursor));
+    const pcm = Buffer.concat(chunks);
+    const hdr = Buffer.alloc(44);
+    hdr.write("RIFF", 0); hdr.writeUInt32LE(36 + pcm.length, 4); hdr.write("WAVE", 8);
+    hdr.write("fmt ", 12); hdr.writeUInt32LE(16, 16); hdr.writeUInt16LE(1, 20);
+    hdr.writeUInt16LE(fmt.channels, 22); hdr.writeUInt32LE(fmt.sampleRate, 24);
+    hdr.writeUInt32LE(fmt.byteRate, 28); hdr.writeUInt16LE(fmt.byteRate / fmt.sampleRate, 32);
+    hdr.writeUInt16LE(fmt.bits, 34); hdr.write("data", 36); hdr.writeUInt32LE(pcm.length, 40);
+    const narrationWav = path.join(outDir, "_narration.wav");
+    await writeFile(narrationWav, Buffer.concat([hdr, pcm]));
+
+    // ---------- phase B: record ----------
+    const ctx = await browser.newContext({
+      viewport: { width: 1280, height: 900 },
+      recordVideo: { dir: outDir, size: { width: 1280, height: 900 } },
+      ...emu
+    });
+    if (auth.cookies.length) await ctx.addCookies(auth.cookies);
+    const page = await ctx.newPage();
+    await page.goto(job.url, { waitUntil: "load" });
+    await applySteps(page, job.steps);
+    await page.evaluate(() => { document.activeElement?.blur?.(); window.scrollTo(0, 0); });
+
+    const caption = async text => {
+      await page.evaluate(({ t2, nvdaUsed }) => {
+        let c = document.getElementById("__audit_cap");
+        if (!c) {
+          c = document.createElement("div");
+          c.id = "__audit_cap";
+          c.style.cssText = "position:fixed;left:0;right:0;bottom:0;z-index:2147483647;background:rgba(8,16,32,.92);color:#fff;padding:12px 18px 14px;font:500 15px/1.4 system-ui;border-top:3px solid #6FA8FF";
+          const tag = document.createElement("div");
+          tag.style.cssText = "font:700 10px system-ui;letter-spacing:.08em;color:#8FBCFF;margin-bottom:3px";
+          tag.textContent = nvdaUsed ? "AUTOMATED AUDIT — REAL NVDA OUTPUT (RE-VOICED)" : "AUTOMATED AUDIT — SIMULATED NARRATION";
+          const body = document.createElement("div"); body.id = "__audit_cap_t";
+          c.append(tag, body); document.body.appendChild(c);
+        }
+        document.getElementById("__audit_cap_t").textContent = t2;
+      }, { t2: text, nvdaUsed: analysis.nvdaUsed });
+    };
+
+    const t0 = Date.now();
+    for (let si = 0; si < schedule.length; si++) {
+      const s = schedule[si];
+      const wait = s.start - (Date.now() - t0);
+      if (wait > 0) await page.waitForTimeout(wait);
+      await caption(s.text);
+      if (s.action?.type === "tab") await page.keyboard.press("Tab");
+      if (s.action?.type === "layout") {
+        const { w, h } = s.action.vp;
+        await page.setViewportSize({ width: w, height: h });
+        // The scroll spans the whole slot (narration + pad): it reaches the
+        // true bottom just before the slot ends and holds there one second,
+        // so the end of the page is always on camera.
+        const slotEnd = si + 1 < schedule.length ? schedule[si + 1].start : TOTAL;
+        const avail = Math.max(3000, slotEnd - (Date.now() - t0) - 1400);
+        await page.evaluate(async ms => {
+          window.scrollTo(0, 0);
+          const start = Date.now();
+          const hh = () => document.documentElement.scrollHeight - innerHeight;
+          // Adaptive step: remaining distance over remaining time, so the
+          // bottom is reached exactly as the budget expires — even when the
+          // page is tall or lazy-loaded content grows it mid-scroll.
+          while (Date.now() - start < ms && scrollY < hh() - 2) {
+            const remaining = ms - (Date.now() - start);
+            scrollBy(0, Math.max(2, (hh() - scrollY) / Math.max(1, remaining / 16)));
+            await new Promise(r => setTimeout(r, 16));
+          }
+          window.scrollTo(0, hh());                       // guarantee the true end is on camera
+          await new Promise(r => setTimeout(r, 1000));    // hold at the bottom
+          window.scrollTo(0, 0);
+        }, avail).catch(() => {});
+      }
+    }
+    const tail = TOTAL - (Date.now() - t0);
+    if (tail > 0) await page.waitForTimeout(tail);
+
+    const video = page.video();
+    await ctx.close();
+    const rawVideo = await video.path();
+
+    // ---------- mux ----------
+    outVideo = path.join(outDir, `${name}.${format}`);
+    const codecArgs = format === "mp4"
+      ? ["-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"]
+      : ["-c:v", "copy", "-c:a", "libopus", "-b:a", "96k"];
+    const mux = spawnSync(ffmpegPath, ["-y", "-i", rawVideo, "-itsoffset", "0.35", "-i", narrationWav,
+      "-map", "0:v", "-map", "1:a", ...codecArgs, "-shortest", outVideo], { encoding: "utf8" });
+    if (mux.status !== 0) throw new Error(mux.stderr.slice(-1200));
+    await unlink(rawVideo).catch(() => {});
+    seconds = Math.round(TOTAL / 1000);
+
+    // narration intermediates
+    for (let i = 0; i < plan.length; i++) await unlink(path.join(outDir, `seg-${i}.wav`)).catch(() => {});
+    await unlink(stepsJson).catch(() => {});
+    await unlink(narrationWav).catch(() => {});
+    }
+
+    // ---------- reports ----------
+    await writeFile(path.join(outDir, `${name}-axe.json`), JSON.stringify(analysis, null, 2));
+
+    const md = [];
+    md.push(`# Accessibility & Layout Audit — ${analysis.title || host}`, "",
+      `- **URL:** ${job.url}`, `- **Date:** ${analysis.date}`,
+      ...(outVideo ? [`- **Video:** \`${name}.${format}\` (${seconds}s, ${analysis.nvdaUsed ? "real NVDA keyboard output re-voiced + captions" : "simulated narration + captions"})`] : []),
+      ...(job.steps?.length ? [`- **Page state:** ${job.steps.length} setup step${job.steps.length > 1 ? "s" : ""} applied before auditing (listed below)`] : []),
+      ...((emu.colorScheme || emu.reducedMotion) ? [`- **Emulation:** ${[emu.colorScheme && `${emu.colorScheme} color scheme`, emu.reducedMotion && "reduced motion"].filter(Boolean).join(", ")} (page saw prefers-dark=${analysis.emulation?.prefersDark}, prefers-reduced-motion=${analysis.emulation?.prefersReducedMotion})`] : []),
+      ...((auth.cookies.length || Object.keys(auth.headers).length) ? [`- **Auth:** ${auth.cookies.length} cookie(s), ${Object.keys(auth.headers).length} custom header(s) applied (values not recorded)`] : []),
+      "",
+      `## Step-by-step script (replay these steps manually with NVDA/VoiceOver for real verification)`, "");
+    if (job.steps?.length) {
+      md.push("**Setup steps applied first:**", "");
+      job.steps.forEach((s, i) => md.push(`${i + 1}. ${describeStep(s)}`));
+      md.push("", "**Audit walkthrough:**", "");
+    }
+    plan.forEach((s, i) => md.push(`${i + 1}. ${s.action?.type === "tab" ? "**Press Tab.** " : s.action?.type === "layout" ? `**Resize to ${s.action.vp.w}×${s.action.vp.h} and scroll the full page.** ` : ""}${s.text}`));
+    if (diff) {
+      md.push("", "## Baseline comparison", "",
+        `Against baseline from **${diff.baselineDate}**: **${diff.added.length} new**, **${diff.fixed.length} fixed**, ${diff.unchanged} unchanged.`, "");
+      if (diff.added.length) {
+        md.push("**New violations:**", "");
+        diff.added.forEach(x => md.push(`- \`${x.v.id}\` (${x.state}, ${x.v.impact}) — ${x.v.help}`));
+        md.push("");
+      }
+      if (diff.fixed.length) {
+        md.push("**Fixed since baseline:**", "");
+        diff.fixed.forEach(x => md.push(`- \`${x.v.id}\` (${x.state}) — ${x.v.help}`));
+        md.push("");
+      }
+    }
+    md.push("", "## axe-core violations", "");
+    for (const [vp, list] of Object.entries(analysis.axe)) {
+      md.push(`### ${vp} width`, "");
+      if (!list.length) md.push("None. ✅", "");
+      else { md.push("| Rule | Impact | WCAG | Elements |", "| --- | --- | --- | --- |");
+        list.forEach(v => md.push(`| ${v.id} — ${v.help} | ${v.impact} | ${v.wcag.join(", ") || "best practice"} | ${v.nodes.slice(0, 4).map(n => `\`${n}\``).join("<br>")} |`)); md.push(""); }
+    }
+    md.push("## Layout / responsive checks", "",
+      analysis.viewportMeta
+        ? `Viewport meta: \`${analysis.viewportMeta}\` ✅`
+        : `Viewport meta: **missing** — the page will not reflow on mobile (WCAG 1.4.10) ❌`, "");
+    for (const vp of viewports) {
+      const L = analysis.layout[vp.label];
+      md.push(`### ${vp.label} ${vp.w}×${vp.h}`, "",
+        "| Check | Result | Details |", "| --- | --- | --- |",
+        `| Horizontal overflow (WCAG 1.4.10 Reflow) | ${L.overflowPx > 1 ? `❌ ${L.overflowPx}px wider than viewport` : "✅ none"} | ${L.overflowing.map(o => `\`${o.el}\` (+${o.px}px)`).join("<br>") || "—"} |`,
+        `| Interactive targets ≥ 24px (WCAG 2.5.8) | ${L.smallTargets.length ? `❌ ${L.smallTargets.length} too small` : "✅ all pass"} | ${L.smallTargets.map(s2 => `\`${s2.el}\` (${s2.size})`).join("<br>") || "—"} |`,
+        `| Text ≥ 12px | ${L.tinyText.length ? `⚠ ${L.tinyText.length} below 12px` : "✅ all pass"} | ${L.tinyText.map(x => `\`${x.el}\` (${x.px}px)`).join("<br>") || "—"} |`, "");
+    }
+    md.push("### WCAG-strict checks", "",
+      "| Check | Result |", "| --- | --- |",
+      `| Reflow at exactly 320 CSS px (WCAG 1.4.10) | ${analysis.strict.reflow320 ? `❌ overflows by ${analysis.strict.reflow320}px` : "✅ no horizontal scroll"} |`,
+      `| 200% zoom, 1280px window → 640px equivalent (WCAG 1.4.4/1.4.10) | ${analysis.strict.zoom200 ? `❌ overflows by ${analysis.strict.zoom200}px` : "✅ no horizontal scroll"} |`,
+      `| Keyboard trap (WCAG 2.1.2), full-page tab cycle | ${analysis.keyboardTrap.status === "trap" ? `❌ focus stuck on \`${analysis.keyboardTrap.at}\` after ${analysis.keyboardTrap.stops} tabs` : `✅ none (${analysis.keyboardTrap.stops} stops traversed)`} |`, "");
+    if (analysis.screenshots?.length) {
+      md.push("## Screenshots", "",
+        "Full-page captures per viewport; offending elements are outlined in red.", "");
+      analysis.screenshots.forEach(s => md.push(`- \`${s.file}\` — ${s.viewport}, ${s.marked} element${s.marked === 1 ? "" : "s"} highlighted`));
+      md.push("");
+    }
+    md.push("## Headings", "", ...analysis.headings.map(h => `${"  ".repeat(h.level - 1)}- h${h.level}: ${h.text}`), "",
+      "## Keyboard order (first tab stops)", "",
+      analysis.nvdaUsed
+        ? "| # | Simulated (approximation) | NVDA announced |"
+        : "| # | Announced as |",
+      analysis.nvdaUsed ? "| --- | --- | --- |" : "| --- | --- |",
+      ...analysis.tabStops.map((s, i) => analysis.nvdaUsed
+        ? `| ${i + 1} | ${s.name || "*(unnamed)*"}, ${s.role} | ${s.nvda ? String(s.nvda).replace(/\|/g, "\\|") : "*(silence — investigate)*"} |`
+        : `| ${i + 1} | ${s.name || "*(unnamed — WCAG 4.1.2 failure)*"}, ${s.role} |`),
+      "",
+      "## Limitations", "",
+      analysis.nvdaUsed
+        ? "- Keyboard announcements are the **real output of NVDA**, captured from its speech log and re-voiced by synthesized speech in the video. Non-keyboard sections (axe, layout) remain automated checks."
+        : "- The narration is **simulated** (synthesized voice reading the page's ARIA + axe output). It is not evidence of real screen-reader behavior — replay the steps above with NVDA (Windows) and VoiceOver (iOS) for compliance testing.",
+      "- axe cannot inspect cross-origin iframes (hosted payment fields, embeds); pages with a strict CSP may block the scan entirely (reported as `scan-failed`).",
+      "- Accessible names in the keyboard walk are approximated; the browser's real accessibility tree is authoritative.", "");
+    if (wantMd) await writeFile(path.join(outDir, `${name}-report.md`), md.join("\n"));
+
+    // ---------- PDF (default on) ----------
+    if (wantPdf) {
+      const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const inline = s => esc(s).replace(/&lt;br&gt;/g, "<br>")
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/`([^`]+)`/g, "<code>$1</code>");
+      const out = []; let list = null; let tableRows = 0;
+      const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+      for (const line of md.join("\n").split("\n")) {
+        const h = line.match(/^(#{1,3}) (.+)/);
+        if (h) { closeList(); tableRows = 0; out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); continue; }
+        if (/^\|/.test(line)) {
+          if (/^\|[\s|:-]+\|$/.test(line)) continue;
+          const cells = line.slice(1, -1).split("|").map(c => inline(c.trim()));
+          const tag = tableRows === 0 ? "th" : "td";
+          if (tableRows === 0) { closeList(); out.push("<table>"); }
+          out.push(`<tr>${cells.map(c => `<${tag}>${c}</${tag}>`).join("")}</tr>`);
+          tableRows++; continue;
+        }
+        if (tableRows) { out.push("</table>"); tableRows = 0; }
+        const li = line.match(/^\s*(?:[-*]|\d+\.) (.+)/);
+        if (li) {
+          const want = /^\s*\d+\./.test(line) ? "ol" : "ul";
+          if (list !== want) { closeList(); out.push(`<${want}>`); list = want; }
+          out.push(`<li>${inline(li[1])}</li>`); continue;
+        }
+        closeList();
+        if (line.trim()) out.push(`<p>${inline(line)}</p>`);
+      }
+      closeList(); if (tableRows) out.push("</table>");
+      const html = `<!doctype html><meta charset="utf-8"><style>
+        body{font:11pt/1.5 "Segoe UI",system-ui,sans-serif;color:#1a2433;margin:0}
+        h1{font-size:19pt;margin:0 0 .4em;color:#06214A} h2{font-size:14pt;margin:1.2em 0 .4em;color:#06214A;border-bottom:1px solid #d3dbe5;padding-bottom:.15em}
+        h3{font-size:12pt;margin:1em 0 .3em} p,li{margin:.25em 0}
+        table{border-collapse:collapse;width:100%;margin:.5em 0;font-size:9.5pt}
+        th,td{border:1px solid #c9d0d9;padding:5px 8px;text-align:left;vertical-align:top}
+        th{background:#edf1f6} code{background:#edf1f6;padding:1px 4px;border-radius:3px;font:9pt Consolas,monospace}
+        ol li{margin:.35em 0}</style><body>${out.join("\n")}</body>`;
+      try {
+        const pdfPage = await browser.newPage();
+        await pdfPage.setContent(html, { waitUntil: "load" });
+        await pdfPage.pdf({
+          path: path.join(outDir, `${name}-report.pdf`), format: "A4", printBackground: true,
+          margin: { top: "18mm", bottom: "18mm", left: "15mm", right: "15mm" }
+        });
+        await pdfPage.close();
+      } catch (e) { console.error(`  PDF generation failed (markdown report still written): ${e.message}`); }
+    }
+
+    // ---------- SARIF / JUnit for CI systems ----------
+    if (job.sarif) {
+      const LEVEL = { critical: "error", serious: "error", moderate: "warning", minor: "note" };
+      const rules = new Map();
+      const sarifResults = [];
+      for (const [state, list] of Object.entries(analysis.axe)) {
+        for (const v of list) {
+          if (!rules.has(v.id)) rules.set(v.id, {
+            id: v.id,
+            shortDescription: { text: v.help },
+            properties: { wcag: v.wcag }
+          });
+          for (const node of v.nodes || []) {
+            sarifResults.push({
+              ruleId: v.id,
+              level: LEVEL[v.impact] || "warning",
+              message: { text: `${v.help} [${state} width]` },
+              locations: [{
+                physicalLocation: { artifactLocation: { uri: job.url } },
+                logicalLocations: [{ fullyQualifiedName: node }]
+              }]
+            });
+          }
+        }
+      }
+      await writeFile(path.join(outDir, `${name}.sarif`), JSON.stringify({
+        $schema: "https://json.schemastore.org/sarif-2.1.0.json",
+        version: "2.1.0",
+        runs: [{
+          tool: { driver: { name: "a11y-video-audit", version: "1.0.0", rules: [...rules.values()] } },
+          results: sarifResults
+        }]
+      }, null, 2));
+    }
+
+    if (job.junit) {
+      const xmlEsc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      const cases = [];
+      for (const [state, list] of Object.entries(analysis.axe)) {
+        if (!list.length) cases.push(`  <testcase classname="axe.${xmlEsc(state)}" name="axe scan"/>`);
+        list.forEach(v => cases.push(
+          `  <testcase classname="axe.${xmlEsc(state)}" name="${xmlEsc(v.id)}">\n` +
+          `    <failure message="${xmlEsc(v.help)} (${v.impact})">${xmlEsc((v.nodes || []).join("\n"))}</failure>\n` +
+          `  </testcase>`));
+      }
+      const strictCase = (nm, bad, detail) => bad
+        ? `  <testcase classname="layout" name="${nm}">\n    <failure message="${xmlEsc(detail)}"/>\n  </testcase>`
+        : `  <testcase classname="layout" name="${nm}"/>`;
+      cases.push(strictCase("reflow-320px", analysis.strict.reflow320 > 0, `overflows by ${analysis.strict.reflow320}px (WCAG 1.4.10)`));
+      cases.push(strictCase("zoom-200pct", analysis.strict.zoom200 > 0, `overflows by ${analysis.strict.zoom200}px (WCAG 1.4.4)`));
+      cases.push(strictCase("keyboard-trap", analysis.keyboardTrap.status === "trap", `focus stuck on ${analysis.keyboardTrap.at} (WCAG 2.1.2)`));
+      const failures = (cases.join("\n").match(/<failure/g) || []).length;
+      await writeFile(path.join(outDir, `${name}-junit.xml`),
+        `<?xml version="1.0" encoding="UTF-8"?>\n<testsuite name="a11y-video-audit ${xmlEsc(job.url)}" tests="${cases.length}" failures="${failures}">\n${cases.join("\n")}\n</testsuite>\n`);
+    }
+
+    const totalV = Object.values(analysis.axe).reduce((n, v) => n + v.length, 0);
+
+    // CI gate: breach when any violation reaches the configured severity.
+    let failOnBreached = false;
+    if (job.failOn) {
+      const min = IMPACT_RANK[job.failOn];
+      if (!min) throw new Error(`fail-on must be minor|moderate|serious|critical, got "${job.failOn}"`);
+      failOnBreached = Object.values(analysis.axe).flat().some(v => (IMPACT_RANK[v.impact] || 0) >= min);
+    }
+
+    return { outDir, outVideo, seconds, violations: totalV, tabStops: analysis.tabStops.length, pdf: wantPdf, failOnBreached, failOn: job.failOn };
+  } finally {
+    if (nvdaDriver) await nvdaDriver.stop().catch(() => {});
+    await browser.close().catch(() => {});
+  }
+}
+
+// ---------- run all jobs ----------
+const results = [];
+for (const job of jobs) {
+  console.log(`\n=== Auditing ${job.url} ===`);
+  try {
+    const r = await runAudit(job);
+    results.push({ url: job.url, ok: true, ...r });
+    console.log(`${r.outVideo ? `  Video:  ${r.outVideo} (${r.seconds}s)\n` : ""}  Folder: ${r.outDir}\n  axe violations: ${r.violations} | tab stops: ${r.tabStops}${r.pdf ? " | PDF: yes" : ""}`);
+  } catch (e) {
+    results.push({ url: job.url, ok: false, error: e.message });
+    console.error(`  FAILED: ${e.message}`);
+  }
+}
+// ---------- dashboard: a global index.html at the out-base + one per host folder ----------
+const escapeHtml = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+// Scan <base>/<host>/<page>/ into dashboard rows. Each row keeps the raw artifact
+// filenames so links can be built with the right relative prefix per dashboard.
+async function collectRows(base) {
+  let hosts;
+  try { hosts = (await readdir(base, { withFileTypes: true })).filter(d => d.isDirectory()); } catch { return []; }
+  const rows = [];
+  for (const h of hosts) {
+    let pages;
+    try { pages = (await readdir(path.join(base, h.name), { withFileTypes: true })).filter(d => d.isDirectory()); } catch { continue; }
+    for (const p of pages) {
+      const dir = path.join(base, h.name, p.name);
+      let files;
+      try { files = await readdir(dir); } catch { continue; }
+      const axeFile = files.find(f => f.endsWith("-axe.json"));
+      if (!axeFile) continue;
+      let a;
+      try { a = JSON.parse(await readFile(path.join(dir, axeFile), "utf8")); } catch { continue; }
+      const viol = Object.values(a.axe || {}).reduce((n, v) => n + v.length, 0);
+      const layoutIssues = Object.values(a.layout || {}).reduce((n, L) =>
+        n + (L.overflowPx > 1 ? 1 : 0) + (L.smallTargets?.length || 0) + (L.tinyText?.length || 0), 0);
+      rows.push({
+        host: h.name, page: p.name, date: a.date || "", url: a.url || "", viol, layoutIssues,
+        // Only artifacts that actually exist, so the Artifacts column never shows an orphan "—".
+        artifacts: [files.find(f => /\.(mp4|webm)$/.test(f)), files.find(f => f.endsWith("-report.md")),
+                    files.find(f => f.endsWith("-report.pdf"))].filter(Boolean)
+      });
+    }
+  }
+  rows.sort((x, y) => x.host.localeCompare(y.host) || x.page.localeCompare(y.page));
+  return rows;
+}
+
+// Render rows to dashboard HTML. `hrefFor(row, file)` builds each artifact URL relative
+// to where this file lives (out-base root vs inside a host folder); `showHost` adds the
+// hostname subtitle (redundant on a per-host dashboard, so it's hidden there).
+function renderDashboard(rows, hrefFor, showHost) {
+  const chip = (n, label) => n
+    ? `<span class="chip bad">${n} ${label}</span>`
+    : `<span class="chip ok">0 ${label}</span>`;
+  const links = r => r.artifacts.length
+    ? r.artifacts.map(f => `<a href="${hrefFor(r, f)}">${f.split(".").pop()}</a>`).join(" · ")
+    : "—";
+  return `<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accessibility Audit Dashboard</title>
+<style>
+  body{font:15px/1.5 "Segoe UI",system-ui,sans-serif;color:#0B1B33;background:#F4F6F9;margin:0;padding:2rem}
+  h1{font-size:1.5rem;color:#06214A;margin:0 0 .25rem} .sub{color:#4A5A70;margin:0 0 1.5rem}
+  table{border-collapse:collapse;width:100%;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 2px rgb(11 27 51/.06)}
+  th,td{padding:10px 14px;text-align:left;border-bottom:1px solid #E4E9F0;vertical-align:top}
+  th{background:#EDF1F6;font-size:.85rem;text-transform:uppercase;letter-spacing:.04em}
+  tr:last-child td{border-bottom:0}
+  .chip{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.8rem;font-weight:600}
+  .ok{background:#E6F4EC;color:#0F6B45}.bad{background:#FDECEA;color:#B3261E}
+  .host{color:#4A5A70;font-size:.85rem} a{color:#1F5FD0}
+</style>
+<h1>Accessibility Audit Dashboard</h1>
+<p class="sub">Generated ${new Date().toISOString().slice(0, 10)} · ${rows.length} page${rows.length > 1 ? "s" : ""} audited</p>
+<table>
+<tr><th>Page</th><th>URL</th><th>Date</th><th>axe</th><th>Layout</th><th>Artifacts</th></tr>
+${rows.map(r => `<tr>
+  <td><strong>${escapeHtml(r.page)}</strong>${showHost ? `<div class="host">${escapeHtml(r.host)}</div>` : ""}</td>
+  <td><a href="${escapeHtml(r.url)}">${escapeHtml(r.url)}</a></td>
+  <td>${escapeHtml(r.date)}</td>
+  <td>${chip(r.viol, "violations")}</td>
+  <td>${chip(r.layoutIssues, "issues")}</td>
+  <td>${links(r)}</td>
+</tr>`).join("\n")}
+</table></html>`;
+}
+
+// Write the global dashboard at <base> and a per-host one inside each host folder.
+async function writeDashboards(base) {
+  const rows = await collectRows(base);
+  if (!rows.length) return null;
+  const written = [];
+  // Global: links reach down into <host>/<page>/<file>.
+  const globalHref = (r, f) => `${encodeURIComponent(r.host)}/${encodeURIComponent(r.page)}/${encodeURIComponent(f)}`;
+  await writeFile(path.join(base, "index.html"), renderDashboard(rows, globalHref, true));
+  written.push(path.join(base, "index.html"));
+  // Per-host: file sits in the host folder, so links are relative to it (<page>/<file>).
+  for (const host of [...new Set(rows.map(r => r.host))]) {
+    const hostHref = (r, f) => `${encodeURIComponent(r.page)}/${encodeURIComponent(f)}`;
+    await writeFile(path.join(base, host, "index.html"), renderDashboard(rows.filter(r => r.host === host), hostHref, false));
+    written.push(path.join(base, host, "index.html"));
+  }
+  return written;
+}
+
+const bases = [...new Set(jobs.map(j => path.resolve(j.out || "a11y-audits")))];
+for (const base of bases) {
+  try {
+    const written = await writeDashboards(base);
+    if (written) console.log(`\nDashboard: ${written.join("\n           ")}`);
+  } catch (e) { console.error(`Dashboard failed for ${base}: ${e.message}`); }
+}
+
+const failed = results.filter(r => !r.ok).length;
+const breached = results.filter(r => r.failOnBreached);
+console.log(`\nDONE: ${results.length - failed}/${results.length} page${results.length > 1 ? "s" : ""} audited${failed ? `, ${failed} failed` : ""}.`);
+if (breached.length) {
+  breached.forEach(r => console.error(`FAIL-ON BREACH: ${r.url} has violations at/above "${r.failOn}"`));
+  process.exit(2);
+}
+process.exit(failed && failed === results.length ? 1 : 0);
