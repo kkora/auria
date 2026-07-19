@@ -1,47 +1,83 @@
 # Real NVDA mode (Windows)
 
 `--nvda` drives a **real NVDA screen reader** during the keyboard walk instead of the
-simulated narration, capturing what actual assistive technology announces. Windows
-only. Reference: [nvda.md](../nvda.md).
+simulated narration, capturing what actual assistive technology announces per tab stop
+(and re-voicing it into the video). Windows only. Reference: [nvda.md](../nvda.md).
 
-## Step 1 — One-time setup
+## Prerequisites
 
-1. Install **NVDA** (free) from [nvaccess.org](https://www.nvaccess.org/).
-2. Run the Guidepup NVDA automation setup once:
+- **Windows** with an **interactive desktop session** (see the focus note below — this
+  cannot run headless / from a background CI job / over RDP without an attached console).
+- **NVDA** installed (nvaccess.org).
+- The **guidepup NVDA automation add-on** (installed by `npx @guidepup/setup`).
 
-   ```bash
-   npx @guidepup/setup
-   ```
+## Step 1 — Install NVDA
 
-   This installs/configures the Guidepup NVDA add-on for automation. It is **not** a
-   browser add-on.
+Download and install NVDA (free) from [nvaccess.org](https://www.nvaccess.org/).
+Verify: `C:\Program Files\NVDA\nvda.exe` exists.
 
-## Step 2 — Run with `--nvda`
+## Step 2 — Install the guidepup automation add-on (one-time)
+
+This is **separate from the NVDA app** — it prepares a guidepup-managed NVDA
+environment (a controlled NVDA + the NVDA Remote automation add-on) so Auria can drive
+NVDA and read its speech log. Run once, from the project root:
+
+```bash
+npx @guidepup/setup
+```
+
+Success prints `Environment setup complete 🎉`.
+
+> Note: guidepup manages its **own** NVDA config next to the executable it controls —
+> it does **not** populate your normal `%APPDATA%\nvda\addons` folder, so that folder
+> staying empty is expected. The real proof of setup is a working `--nvda` run
+> (Step 3); if it errors with the "install NVDA / `npx @guidepup/setup`" message, the
+> environment isn't ready — re-run this command and check its output.
+
+## Step 3 — Run an audit with `--nvda`
 
 ```bash
 node bin/auria.mjs https://example.gov/checkout --nvda
 ```
 
-Or in config: `{ "nvda": true }`.
+Or in a config file: `{ "nvda": true }`. Auria will:
 
-## Step 3 — Keep the browser focused during the walk
+1. Launch the browser **headed** (visible) — NVDA reads from the focused window.
+2. Start NVDA via guidepup (you'll hear it).
+3. Tab through the page, pressing each Tab **through NVDA** and recording its spoken
+   phrase per stop.
+4. Stop NVDA and write the artifacts.
 
-- The browser runs **headed (visible)** and **must stay focused** for the whole
-  keyboard walk — NVDA reads from the focused window.
-- **Do not switch windows** during the walk; stealing focus fails the capture.
-- Each `Tab` is pressed *through NVDA* and its real spoken phrase is recorded per stop.
+## Step 4 — Keep the window focused during the walk
 
-## Step 4 — Read the results
+This is the one thing that makes or breaks a capture:
 
-- The report's keyboard-walk table gains an **"NVDA announced"** column.
-- In the video, captured NVDA text is **re-voiced** by the same TTS voice — the video
-  then carries real screen-reader behavior, not an approximation.
+- The headed browser window **must stay in the foreground and focused** for the whole
+  keyboard walk. NVDA reads the *focused* window.
+- **Don't touch the mouse/keyboard, switch apps, or lock the screen** during the walk.
+- Prefer a single monitor and close other foreground apps.
+- If focus is lost, Auria fails that job with:
+  `NVDA walk captured no tab stops — the browser window likely lost OS focus…` — just
+  re-run and leave the window alone.
 
-## Errors
+## Step 5 — Read the results
 
-If NVDA or the Guidepup add-on is unavailable, the run **fails immediately** and tells
-you the fix (`npx @guidepup/setup`). For tests, `GUIDEPUP_NVDA_UNAVAILABLE=1` forces
-the unavailable branch.
+- The report's keyboard-walk table gains an **"NVDA announced"** column (the real
+  spoken phrase per stop), and unnamed/silent stops are flagged for investigation.
+- With video on, the captured NVDA text is **re-voiced** by the TTS engine, so the
+  `.mp4` carries real screen-reader behavior, not an approximation. The caption banner
+  reads "REAL NVDA OUTPUT (RE-VOICED)".
+
+## Troubleshooting
+
+| Symptom | Fix |
+| --- | --- |
+| `NVDA mode requested but not available … npx @guidepup/setup` | The add-on isn't installed — run Step 2 and verify the `addons` folder. |
+| `NVDA walk captured no tab stops … lost OS focus` | The window lost focus mid-walk (Step 4). Re-run and don't touch the machine; disable NVDA's startup dialog so it doesn't steal focus. |
+| Nothing happens / hangs on start | NVDA is likely showing its **welcome dialog** on launch. Open NVDA once manually, tick "Show this dialog when NVDA starts" **off**, and dismiss it. |
+| Runs but the NVDA column is empty | NVDA started but produced no speech — confirm NVDA speaks normally outside Auria, then re-run keeping focus. |
+
+`GUIDEPUP_NVDA_UNAVAILABLE=1` forces the unavailable branch (used by the test suite).
 
 ## Scope
 
