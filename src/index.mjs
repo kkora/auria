@@ -23,6 +23,7 @@ import { buildSarif } from "./report/sarif.mjs";
 import { buildJunit } from "./report/junit.mjs";
 import { captureScreenshots } from "./report/screenshots.mjs";
 import { writeDashboards } from "./dashboard.mjs";
+import { recordVideo } from "./record.mjs";
 
 const VIEWPORTS = [
   { label: "Desktop", w: 1280, h: 900 },
@@ -111,9 +112,15 @@ export async function runAudit(job) {
     // ---------- narration plan (drives the report's step-by-step script) ----------
     const plan = buildNarration(analysis, { viewports, host, diff });
 
-    // ---------- video: pending (skipped) ----------
-    const outVideo = null, seconds = null;
-    if (wantVideo) console.error("  Note: narrated video is not available in this build yet — writing reports only (use --no-video to silence this).");
+    // ---------- video: narrate + record + mux (best-effort; never blocks reports) ----------
+    let outVideo = null, seconds = null;
+    if (wantVideo) {
+      try {
+        ({ outVideo, seconds } = await recordVideo(browser, job, { plan, analysis, emu, auth, outDir, name, format }));
+      } catch (e) {
+        console.error(`  Video generation failed (reports still written): ${e.message}`);
+      }
+    }
 
     // ---------- reports ----------
     await writeFile(path.join(outDir, `${name}-axe.json`), JSON.stringify(analysis, null, 2));
@@ -143,7 +150,7 @@ export async function runJobs(jobs) {
     try {
       const r = await runAudit(job);
       results.push({ url: job.url, ok: true, ...r });
-      console.log(`  Folder: ${r.outDir}\n  axe violations: ${r.violations} | tab stops: ${r.tabStops}${r.pdf ? " | PDF: yes" : ""}`);
+      console.log(`${r.outVideo ? `  Video:  ${r.outVideo} (${r.seconds}s)\n` : ""}  Folder: ${r.outDir}\n  axe violations: ${r.violations} | tab stops: ${r.tabStops}${r.pdf ? " | PDF: yes" : ""}`);
     } catch (e) {
       results.push({ url: job.url, ok: false, error: e.message });
       console.error(`  FAILED: ${e.message}`);

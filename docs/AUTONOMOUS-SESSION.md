@@ -34,7 +34,11 @@ _(newest last; each entry: slice — tests — notes)_
 
 7. **Crawler** — `src/crawl.mjs` (`discoverPages` BFS browser walk + `expandCrawl` writing `crawl-map.json` and expanding the seed into one job per page), wired into `bin/auria.mjs` (`--crawl`). Integration +4 (BFS coverage, maxDepth/maxPages bounds, exclude filter). Verified `--crawl` end-to-end: 3 fixture pages discovered + audited. Added crawl fixtures.
 
-Totals after slice 7: **unit 50, integration 14, all green.** The tool is fully usable for single-page, multi-page (config), and whole-site (`--crawl`) analysis-only audits. Only the narrated-video pipeline remains.
+7b. _(after slice 7: unit 50, integration 14, all green — single-page / config / --crawl analysis audits fully working.)_
+
+8. **Narrated-video pipeline** — `src/narrate/tts-windows.mjs` (`synth` via `assets/gen-voice.ps1`, System.Speech), `src/record.mjs` (`parseWav` pure + `recordVideo`: timeline WAV assembly → Playwright recordVideo with caption overlay + Tab/scroll actions → ffmpeg mux to mp4/webm → cleanup), wired defensively into `runAudit` (any video failure falls back to reports-only, so the default CLI never breaks). Unit +2 (`parseWav`). **Smoke-tested on Windows:** `node bin/auria.mjs <fixture>` produced a valid 2.27 MB / 175s `demo.mp4` (ffmpeg decode OK) alongside axe.json + PDF + dashboards. Cross-platform TTS (`tts-crossplatform.mjs`, Linux/SaaS) remains a decision-pending stub — see below.
+
+Totals after slice 8: **unit 52, integration 14, all green.** Auria is now feature-complete for its P1 CLI: analysis + reports (MD/PDF/JSON/SARIF/JUnit) + dashboards + annotated screenshots + whole-site crawl + the narrated video, on Windows.
 
 ## Decisions I made autonomously
 
@@ -54,3 +58,6 @@ _(things I chose without asking; override any you disagree with)_
 ## Future enhancements (deferred, not bugs)
 
 - Rebrand the SARIF driver name and JUnit testsuite prefix from `"a11y-video-audit"` to `"auria"` (kept verbatim during the port to avoid behavior change; do as a deliberate, tested change).
+- **Cross-platform TTS** (`src/narrate/tts-crossplatform.mjs`) — still a decision-pending stub (Piper vs edge-tts, PLAN §9.3). Until it lands, the narrated video only works on Windows; on Linux/SaaS the video step throws and `runAudit` falls back to reports-only. The `getTts()` seam already routes to it, so implementing it behind the same `synth(lines,{voice,rate,outDir})->wavPath[]` contract is all that's needed.
+- **Real NVDA mode** (`src/nvda.mjs` + `--nvda`) — not wired; `runAudit` throws a clear error if requested. Port the guidepup driver + re-voicing when desired.
+- Consider a committed Windows-only video integration test (self-skipping off-Windows) for regression protection; smoke-tested manually this session.
