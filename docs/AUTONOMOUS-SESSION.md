@@ -32,7 +32,9 @@ _(newest last; each entry: slice — tests — notes)_
 5. **Annotated screenshots** — `src/report/screenshots.mjs` (`captureScreenshots`, browser+fs). Integration +1 (PNG magic bytes, marked offenders).
 6. **Runnable wiring** — `src/browser.mjs` (`launchBrowser`, `applySteps`), `src/index.mjs` (`runAudit` analysis-only pipeline + `runJobs`), `bin/auria.mjs` (parseCli/parseConfigFile → runJobs, usage-error handling). Integration +2 end-to-end. **The CLI now runs**: `node bin/auria.mjs <url> --no-video --sarif --junit --md` produces axe.json + MD + PDF + SARIF + JUnit + dashboards. Verified against the local fixture (10 axe violations, exit 0). Includes optional baseline diff and fail-on gating.
 
-Totals after slice 6: **unit 50, integration 10, all green.**
+7. **Crawler** — `src/crawl.mjs` (`discoverPages` BFS browser walk + `expandCrawl` writing `crawl-map.json` and expanding the seed into one job per page), wired into `bin/auria.mjs` (`--crawl`). Integration +4 (BFS coverage, maxDepth/maxPages bounds, exclude filter). Verified `--crawl` end-to-end: 3 fixture pages discovered + audited. Added crawl fixtures.
+
+Totals after slice 7: **unit 50, integration 14, all green.** The tool is fully usable for single-page, multi-page (config), and whole-site (`--crawl`) analysis-only audits. Only the narrated-video pipeline remains.
 
 ## Decisions I made autonomously
 

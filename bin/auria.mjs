@@ -8,6 +8,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseCli, parseConfigFile } from "../src/config.mjs";
+import { expandCrawl } from "../src/crawl.mjs";
 import { runJobs } from "../src/index.mjs";
 
 try {
@@ -22,8 +23,12 @@ try {
     ({ jobs, crawl } = parseConfigFile(cfg));
   }
 
-  // Crawl expansion (discoverPages) is not wired yet — audit the given seed(s) only.
-  if (crawl) console.error("Note: --crawl / config crawl is not available in this build yet — auditing the seed page(s) only.");
+  // Crawl expansion: BFS-discover same-origin pages from the seed, then audit each.
+  if (crawl && jobs.length) {
+    const { jobs: expanded, pages, failed } = await expandCrawl(jobs[0], crawl);
+    console.log(`Crawl: ${pages.length} pages discovered${failed.length ? `, ${failed.length} unreachable` : ""} (maxPages ${crawl.maxPages ?? 20}, maxDepth ${crawl.maxDepth ?? 3})`);
+    jobs = expanded;
+  }
 
   process.exit(await runJobs(jobs));
 } catch (e) {
