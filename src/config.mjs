@@ -32,3 +32,39 @@ export function normalizeAuth(auth, url) {
   }
   return { cookies, headers: auth.headers || {} };
 }
+
+// Config file -> job list. Takes already-parsed JSON; the caller reads the file.
+// Every property resolves per-page ?? top-level config ?? default (undefined here,
+// with real defaults applied downstream in runAudit).
+export function parseConfigFile(cfg) {
+  const pages = cfg.pages || [];
+  if (!pages.length) throw usageError("Config file has no `pages` array.");
+  const jobs = [];
+  for (const p of pages) {
+    if (!p.url) throw usageError("Every config page needs a `url`.");
+    jobs.push({
+      url: p.url,
+      name: p.name,
+      tabs: p.tabs ?? cfg.tabs,
+      format: p.format ?? cfg.format,
+      pdf: p.pdf ?? cfg.pdf,
+      md: p.md ?? cfg.md,
+      video: p.video ?? cfg.video,
+      steps: p.steps,
+      viewports: p.viewports ?? cfg.viewports,
+      colorScheme: p.colorScheme ?? cfg.colorScheme,
+      reducedMotion: p.reducedMotion ?? cfg.reducedMotion,
+      voice: p.voice ?? cfg.voice,
+      rate: p.rate ?? cfg.rate,
+      auth: p.auth ?? cfg.auth,
+      baseline: p.baseline ?? cfg.baseline,
+      failOn: p.failOn ?? cfg.failOn,
+      screenshots: p.screenshots ?? cfg.screenshots,
+      sarif: p.sarif ?? cfg.sarif,
+      junit: p.junit ?? cfg.junit,
+      nvda: p.nvda ?? cfg.nvda,
+      out: cfg.out,
+    });
+  }
+  return { jobs, crawl: cfg.crawl || null };
+}

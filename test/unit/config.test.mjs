@@ -50,3 +50,40 @@ test("normalizeAuth: headers pass through, default empty", () => {
   assert.deepEqual(normalizeAuth({ headers: { A: "b" } }, "https://x.gov/").headers, { A: "b" });
   assert.deepEqual(normalizeAuth({ cookies: "a=1" }, "https://x.gov/").headers, {});
 });
+
+import { parseConfigFile } from "../../src/config.mjs";
+import { readFile } from "node:fs/promises";
+
+test("parseConfigFile: per-page value overrides config default", () => {
+  const { jobs } = parseConfigFile({
+    tabs: 10,
+    pages: [{ url: "https://x.gov/a", tabs: 14 }, { url: "https://x.gov/b" }],
+  });
+  assert.equal(jobs[0].tabs, 14); // per-page wins
+  assert.equal(jobs[1].tabs, 10); // falls back to config
+});
+
+test("parseConfigFile: passes crawl through, defaults to null", () => {
+  assert.equal(parseConfigFile({ pages: [{ url: "https://x.gov/" }] }).crawl, null);
+  assert.deepEqual(
+    parseConfigFile({ crawl: { maxPages: 5 }, pages: [{ url: "https://x.gov/" }] }).crawl,
+    { maxPages: 5 }
+  );
+});
+
+test("parseConfigFile: throws usageError on empty pages", () => {
+  assert.throws(() => parseConfigFile({ pages: [] }), e => e.usage === true);
+});
+
+test("parseConfigFile: throws usageError when a page lacks url", () => {
+  assert.throws(() => parseConfigFile({ pages: [{ name: "x" }] }), e => e.usage === true);
+});
+
+test("parseConfigFile: the committed sample config parses", async () => {
+  const cfg = JSON.parse(await readFile(new URL("../../examples/pages.sample.json", import.meta.url), "utf8"));
+  const { jobs } = parseConfigFile(cfg);
+  assert.equal(jobs.length, 3);
+  assert.equal(jobs[0].name, "payment-page");
+  assert.equal(jobs[0].tabs, 14); // per-page override
+  assert.equal(jobs[1].tabs, 10); // config default
+});
