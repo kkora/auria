@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import os from "node:os";
 import { selectEngine } from "../../src/narrate/tts.mjs";
-import { lengthScale, piperConfig, synth } from "../../src/narrate/tts-piper.mjs";
+import { lengthScale, piperConfig, synth, chooseFlags } from "../../src/narrate/tts-piper.mjs";
 
 test("selectEngine: explicit AURIA_TTS override wins", () => {
   assert.equal(selectEngine({ AURIA_TTS: "piper" }, "linux"), "piper");
@@ -39,6 +39,20 @@ test("piperConfig: the job voice overrides, bin defaults to 'piper'", () => {
   } finally {
     if (prev !== undefined) process.env.PIPER_VOICE = prev;
   }
+});
+
+test("piper chooseFlags: detects the classic rhasspy/piper CLI dialect", () => {
+  const help = "usage: piper\n  --model FILE\n  --output_file FILE\n  --length_scale N\n";
+  assert.deepEqual(chooseFlags(help), { model: "--model", output: "--output_file", lengthScale: "--length_scale" });
+});
+
+test("piper chooseFlags: detects the newer piper1-gpl / pip dialect", () => {
+  const help = "usage: piper\n  -m, --model MODEL\n  -f, --output-file OUTPUT\n  --length-scale LENGTH_SCALE\n";
+  assert.deepEqual(chooseFlags(help), { model: "--model", output: "--output-file", lengthScale: "--length-scale" });
+});
+
+test("piper chooseFlags: falls back to universal short flags, omits unknown length-scale", () => {
+  assert.deepEqual(chooseFlags(""), { model: "-m", output: "-f", lengthScale: null });
 });
 
 test("piper synth: clear guidance when no voice model is configured", async () => {

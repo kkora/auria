@@ -73,6 +73,24 @@ neural engine, the presence of a voice model). Precedence:
 PIPER_VOICE=~/voices/en_US-amy-medium.onnx node bin/auria.mjs https://example.gov/checkout
 ```
 
+#### Installing Piper (neural)
+
+1. **Binary** — download from [github.com/rhasspy/piper/releases](https://github.com/rhasspy/piper/releases)
+   (`piper_windows_amd64.zip` on Windows x64) and extract to e.g. `C:\tools\piper\`
+   (keep `piper.exe` with its DLLs and `espeak-ng-data\`).
+2. **Voice** — from [huggingface.co/rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices)
+   download **both** `<voice>.onnx` and `<voice>.onnx.json` (e.g. `en_US-amy-medium`) into one folder.
+3. **Point Auria at it:**
+   ```powershell
+   $env:PIPER_BIN   = "C:\tools\piper\piper.exe"   # optional if piper is on PATH
+   $env:PIPER_VOICE = "C:\tools\piper\voices\en_US-amy-medium.onnx"
+   node bin/auria.mjs https://example.gov/checkout
+   ```
+
+Either Piper build works — the classic **rhasspy/piper** (`--output_file` / `--length_scale`)
+or the newer **piper1-gpl** / `pip install piper-tts` (`--output-file` / `--length-scale`).
+Auria reads `piper --help` once and picks the matching flags automatically.
+
 All engines emit the same PCM-WAV contract, so the rest of the pipeline is identical.
 If the selected engine is unavailable, the video step warns and Auria still writes all
 reports (never a hard failure).
