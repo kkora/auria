@@ -41,12 +41,45 @@ normalize/dedupe URLs.
 - `parseCli(argv)` → `{ jobs, crawlOpts }` — the positional/flag branch (lines
   33–145) refactored to take `argv` and **return data instead of calling
   `process.exit`**. Preserves the per-page → config → default precedence exactly.
+  This includes the `--cookie` / `--header` → `auth` object assembly (lines 127–133).
 
-Tests:
+#### `parseCli` ↔ `parseConfigFile` handoff (contract)
+
+The two functions split responsibility along the filesystem boundary, so the pure
+layer never reads a file:
+
+1. `parseCli(argv)` parses flags and positionals. It **detects `--config`** and
+   returns the config path in its result (e.g. `{ jobs, crawlOpts, configPath }`)
+   rather than reading it. When `--config` is absent it returns the positional-URL
+   job as today.
+2. The **caller** (`bin/auria.mjs`, a later slice) is the only place that touches the
+   filesystem: if `configPath` is set, it `readFile` + `JSON.parse`s it and calls
+   `parseConfigFile(cfg)` to get `{ jobs, crawl }`; otherwise it uses `parseCli`'s
+   own job list.
+
+This keeps `readFile`/`JSON.parse` out of `config.mjs` (pure, unit-testable without
+the filesystem) while making the "who reads the file" question unambiguous.
+
+### Tests
+
 - **Un-skip** `test/unit/url-normalize.test.mjs` (remove the `PENDING` skip). Passes
   as-is against the real `normalizeUrl`.
-- **New** `test/unit/config.test.mjs` covering `slugify` edge cases, `normalizeAuth`
-  variants, and `parseCli` / `parseConfigFile` precedence.
+- **New** `test/unit/config.test.mjs` covering:
+  - `slugify` edge cases (empty → `home`, extension strip, path segments).
+  - `normalizeAuth` variants (string cookies, array cookies with/without an explicit
+    `domain`/`url`, headers object, empty/undefined → `{ cookies: [], headers: {} }`).
+  - **`parseConfigFile` precedence** — per-page value wins over top-level config wins
+    over default, for a representative property (e.g. `tabs`).
+  - **`parseConfigFile` against the real committed example** — feed
+    `examples/pages.sample.json` through it so the example can't silently drift out of
+    sync with the parser (a regression guard the monolith lacked). Read the file in
+    the test; `parseConfigFile` itself stays filesystem-free.
+  - **`parseCli` value-flag vs positional** — `--out foo <url>` must treat `foo` as
+    the flag value (via `VALUE_FLAGS`, monolith lines 34, 39–43), not the audited
+    URL. Guards a nasty regression class.
+  - **`parseCli` auth assembly** — `--header "X: y"` → `{ X: "y" }`, and repeated
+    `--cookie` flags join into one cookie string. This is the CLI half of the
+    security invariant (raw values used to drive the browser, never emitted).
 
 ### Out of scope (later slices)
 
@@ -95,6 +128,10 @@ preserving the monolith's observable behavior while making the logic unit-testab
       still a throwing stub with its `TODO(port)`.
 - [ ] `slugify`, `slugFromUrl`, `normalizeAuth`, `parseConfigFile`, `parseCli`
       exported from `src/config.mjs`, all pure (no `process.exit`, no browser).
+- [ ] `parseCli` returns `configPath` when `--config` is present and does not read
+      the file itself.
 - [ ] `test/unit/url-normalize.test.mjs` un-skipped and passing.
-- [ ] `test/unit/config.test.mjs` added and passing.
+- [ ] `test/unit/config.test.mjs` added and passing, including the
+      `examples/pages.sample.json` round-trip, the value-flag-vs-positional case, and
+      the `--cookie`/`--header` auth-assembly case.
 - [ ] `npm run test:unit` green.
