@@ -43,3 +43,12 @@ the flags (`format`, `pdf`, `video`, `tabs`, `viewports`, `colorScheme`,
 
 `steps` (per page) put the page into a state before auditing — one action key per
 entry (`click` / `fill` / `select` / `focus` / `press`) plus optional `wait`.
+
+## Environment variables
+
+| Var | Effect |
+| --- | --- |
+| `AURIA_TTS` | Force the narration engine: `piper` \| `windows` \| `crossplatform`. Otherwise: Piper when `PIPER_VOICE` is set, else System.Speech on Windows, else espeak-ng. |
+| `PIPER_VOICE` | Path to a Piper `.onnx` neural voice (auto-selects Piper). See [guides/narrated-video.md](guides/narrated-video.md#installing-piper-neural). |
+| `PIPER_BIN` | Path to the `piper` binary (default: `piper` on `PATH`). |
+| `GUIDEPUP_NVDA_UNAVAILABLE=1` | Test override — forces the NVDA-unavailable branch. |

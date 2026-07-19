@@ -20,9 +20,10 @@ For each page:
 Plus optional SARIF/JUnit for CI, annotated screenshots, baseline diffs, a site
 crawler, and per-host + global dashboards.
 
-> **Status: scaffold.** This repository is being extracted from a working monolith
-> (`tools/a11y-video-audit.mjs`). Most `src/` modules are stubs today — see
-> [docs/PLAN.md](docs/PLAN.md) for the plan and [CLAUDE.md](CLAUDE.md) for setup.
+> **Status: P1 CLI complete.** The full engine is ported from the original monolith —
+> analysis, all report formats, dashboards, annotated screenshots, whole-site crawl,
+> the narrated video (Windows System.Speech, cross-platform espeak-ng, or neural Piper),
+> and real NVDA mode. See [docs/PLAN.md](docs/PLAN.md) and [CLAUDE.md](CLAUDE.md).
 
 ## Quickstart
 
