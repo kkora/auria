@@ -26,3 +26,6 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+
+# Subagent-driven-development scratch (briefs, reports, ledger)
+.superpowers/
