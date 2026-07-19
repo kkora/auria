@@ -10,8 +10,10 @@
 // Windows-only. Along with tts-windows.mjs, the only module allowed a hard OS
 // dependency. In the SaaS this runs on a dedicated Windows worker pool.
 
-// TODO(port): move nvdaPreflight from the monolith here.
-
 export async function nvdaPreflight() {
-  throw new Error("not implemented — scaffold");
+  if (process.env.GUIDEPUP_NVDA_UNAVAILABLE === "1")
+    throw new Error("forced unavailable for tests");
+  const { nvda } = await import("@guidepup/guidepup");
+  await nvda.start();          // throws if NVDA / the guidepup add-on is not installed
+  return nvda;
 }

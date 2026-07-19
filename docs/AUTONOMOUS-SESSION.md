@@ -38,7 +38,11 @@ _(newest last; each entry: slice — tests — notes)_
 
 8. **Narrated-video pipeline** — `src/narrate/tts-windows.mjs` (`synth` via `assets/gen-voice.ps1`, System.Speech), `src/record.mjs` (`parseWav` pure + `recordVideo`: timeline WAV assembly → Playwright recordVideo with caption overlay + Tab/scroll actions → ffmpeg mux to mp4/webm → cleanup), wired defensively into `runAudit` (any video failure falls back to reports-only, so the default CLI never breaks). Unit +2 (`parseWav`). **Smoke-tested on Windows:** `node bin/auria.mjs <fixture>` produced a valid 2.27 MB / 175s `demo.mp4` (ffmpeg decode OK) alongside axe.json + PDF + dashboards. Cross-platform TTS (`tts-crossplatform.mjs`, Linux/SaaS) remains a decision-pending stub — see below.
 
-Totals after slice 8: **unit 52, integration 14, all green.** Auria is now feature-complete for its P1 CLI: analysis + reports (MD/PDF/JSON/SARIF/JUnit) + dashboards + annotated screenshots + whole-site crawl + the narrated video, on Windows.
+_(after slice 8: unit 52, integration 14, all green — feature-complete P1 CLI on Windows.)_
+
+9. **Real NVDA mode** (`src/nvda.mjs` `nvdaPreflight` + wired into `runAudit`) — with `--nvda`, launches a headed browser, starts NVDA via @guidepup, passes the driver to `walkTabOrder` (captures real spoken phrases per tab stop), sets `nvdaUsed` (so the report + video re-voice real NVDA output), and stops the driver in `finally`. Unavailable NVDA → a clear "install NVDA + `npx @guidepup/setup`" error; the audit fails that job cleanly (exit 1) rather than hanging. Unit +1 (forced-unavailable override), integration +1 (guidance path). **Smoke-tested:** `--nvda` on this box (no NVDA installed) surfaces the guidance and exits 1. The NVDA-installed capture/re-voice path is ported verbatim but not verifiable here (no NVDA).
+
+Totals after slice 9: **unit 53, integration 15, all green.**
 
 ## Decisions I made autonomously
 

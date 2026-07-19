@@ -24,6 +24,7 @@ import { buildJunit } from "./report/junit.mjs";
 import { captureScreenshots } from "./report/screenshots.mjs";
 import { writeDashboards } from "./dashboard.mjs";
 import { recordVideo } from "./record.mjs";
+import { nvdaPreflight } from "./nvda.mjs";
 
 const VIEWPORTS = [
   { label: "Desktop", w: 1280, h: 900 },
@@ -52,15 +53,22 @@ export async function runAudit(job) {
   const auth = normalizeAuth(job.auth, job.url);
   if (Object.keys(auth.headers).length) emu.extraHTTPHeaders = auth.headers;
 
-  if (job.nvda) throw new Error("NVDA mode is not wired in this build yet (the video pipeline is pending). Re-run without --nvda.");
-
   const host = new URL(job.url).hostname.replace(/[^a-z0-9.-]/gi, "_") || "site";
   const name = (job.name || slugFromUrl(job.url)).replace(/[^a-z0-9._-]/gi, "-");
   const outDir = path.resolve(job.out || "a11y-audits", host, name);
   await mkdir(outDir, { recursive: true });
 
+  // NVDA runs headed (it reads the focused window); everything else can be headless.
   const browser = await launchBrowser({ headless: job.nvda ? false : undefined });
+  let nvdaDriver = null;
   try {
+    if (job.nvda) {
+      try { nvdaDriver = await nvdaPreflight(); }
+      catch (e) {
+        throw new Error(`NVDA mode requested but not available: ${e.message}. ` +
+          `Install NVDA (nvaccess.org) and run: npx @guidepup/setup`);
+      }
+    }
     // ---------- analyze ----------
     const analysis = { url: job.url, date: new Date().toISOString().slice(0, 10), axe: {}, headings: [], tabStops: [], title: "", nvdaUsed: false };
     {
@@ -82,7 +90,8 @@ export async function runAudit(job) {
       analysis.layout = await runLayout(page, viewports);
       if (job.screenshots) analysis.screenshots = await captureScreenshots(page, analysis, { viewports, outDir, name });
       analysis.strict = await runStrict(page);
-      analysis.tabStops = await walkTabOrder(page, { maxTabs, nvda: null });
+      analysis.tabStops = await walkTabOrder(page, { maxTabs, nvda: nvdaDriver });
+      analysis.nvdaUsed = !!nvdaDriver;
       analysis.keyboardTrap = await detectKeyboardTrap(page);
       await ctx.close();
     }
@@ -139,6 +148,7 @@ export async function runAudit(job) {
     }
     return { outDir, outVideo, seconds, violations: totalV, tabStops: analysis.tabStops.length, pdf: wantPdf, failOnBreached, failOn: job.failOn };
   } finally {
+    if (nvdaDriver) await nvdaDriver.stop().catch(() => {});
     await browser.close().catch(() => {});
   }
 }
