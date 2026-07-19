@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildSarif } from "../../src/report/sarif.mjs";
+import { buildJunit } from "../../src/report/junit.mjs";
 
 const URL = "https://x.gov/pay";
 
@@ -35,3 +36,21 @@ test("buildSarif: schema, version, deduped rules, level mapping, url location", 
   assert.equal(imageAlt[0].locations[0].physicalLocation.artifactLocation.uri, URL);
   assert.equal(imageAlt[0].locations[0].logicalLocations[0].fullyQualifiedName, "img");
 });
+
+test("buildJunit: testsuite counts, failure counting, xml escaping", () => {
+  const xml = buildJunit(analysis, { url: URL });
+  // cases: 2 axe rules (Desktop) + 1 empty 'axe scan' (Phone) + reflow/zoom/keyboard = 6
+  // failures: image-alt + color-contrast + reflow-320 (12>0) = 3 (zoom 0, trap pass = clean)
+  assert.match(xml, /<testsuite name="a11y-video-audit https:\/\/x\.gov\/pay" tests="6" failures="3">/);
+  assert.ok(xml.includes('<testcase classname="axe.Phone" name="axe scan"/>'));
+  assert.ok(xml.includes('name="reflow-320px"'));
+  assert.match(xml, /overflows by 12px/);
+  assert.ok(xml.includes('<testcase classname="layout" name="zoom-200pct"/>'));   // pass -> self-closing
+  assert.ok(xml.includes('<testcase classname="layout" name="keyboard-trap"/>')); // pass -> self-closing
+  // XML escaping of the minor rule's help string (& " <)
+  assert.ok(xml.includes("&amp;"));
+  assert.ok(xml.includes("&quot;quotes&quot;"));
+  assert.ok(xml.includes("&lt;tag&gt;"));
+});
+
+export { analysis, URL };
