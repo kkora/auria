@@ -68,3 +68,64 @@ export function parseConfigFile(cfg) {
   }
   return { jobs, crawl: cfg.crawl || null };
 }
+
+const VALUE_FLAGS = new Set(["out", "name", "tabs", "format", "config", "color-scheme",
+  "voice", "rate", "cookie", "header", "baseline", "fail-on", "max-pages", "max-depth"]);
+
+const USAGE =
+  "Usage: node bin/auria.mjs <url> [--out base] [--name page] [--tabs n] [--format mp4|webm] [--no-pdf] [--crawl] [--nvda]\n" +
+  "       node bin/auria.mjs --config pages.json";
+
+// CLI flags + positional URL -> { jobs, crawlOpts, configPath }. Pure: no file reads,
+// no process.exit. When --config is present the caller reads it and calls parseConfigFile.
+export function parseCli(argv) {
+  const args = argv;
+  const opt = k => { const i = args.indexOf(`--${k}`); return i >= 0 ? args[i + 1] : null; };
+  const optAll = k => args.flatMap((a, i) => a === `--${k}` ? [args[i + 1]] : []).filter(Boolean);
+  const positionals = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a.startsWith("--")) { if (VALUE_FLAGS.has(a.slice(2))) i++; }
+    else positionals.push(a);
+  }
+
+  const configPath = opt("config");
+  if (configPath) return { jobs: [], crawlOpts: null, configPath };
+
+  const url = positionals[0];
+  if (!url) throw usageError(USAGE);
+
+  const jobs = [{
+    url,
+    name: opt("name"),
+    tabs: opt("tabs"),
+    format: opt("format"),
+    pdf: args.includes("--no-pdf") ? false : undefined,
+    md: args.includes("--md") ? true : undefined,
+    video: args.includes("--no-video") ? false : undefined,
+    colorScheme: opt("color-scheme") || undefined,
+    reducedMotion: args.includes("--reduced-motion") ? true : undefined,
+    voice: opt("voice") || undefined,
+    rate: opt("rate") || undefined,
+    auth: (optAll("cookie").length || optAll("header").length) ? {
+      cookies: optAll("cookie").join("; "),
+      headers: Object.fromEntries(optAll("header").map(h => {
+        const i = h.indexOf(":");
+        return [h.slice(0, i).trim(), h.slice(i + 1).trim()];
+      })),
+    } : undefined,
+    baseline: opt("baseline") || undefined,
+    failOn: opt("fail-on") || undefined,
+    screenshots: args.includes("--screenshots") ? true : undefined,
+    sarif: args.includes("--sarif") ? true : undefined,
+    junit: args.includes("--junit") ? true : undefined,
+    nvda: args.includes("--nvda") ? true : undefined,
+    out: opt("out"),
+  }];
+
+  let crawlOpts = null;
+  if (args.includes("--crawl")) {
+    crawlOpts = { maxPages: opt("max-pages") ?? undefined, maxDepth: opt("max-depth") ?? undefined };
+  }
+  return { jobs, crawlOpts, configPath: null };
+}

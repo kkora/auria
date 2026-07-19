@@ -87,3 +87,40 @@ test("parseConfigFile: the committed sample config parses", async () => {
   assert.equal(jobs[0].tabs, 14); // per-page override
   assert.equal(jobs[1].tabs, 10); // config default
 });
+
+import { parseCli } from "../../src/config.mjs";
+
+test("parseCli: --config returns the path without reading it", () => {
+  const r = parseCli(["--config", "pages.json"]);
+  assert.equal(r.configPath, "pages.json");
+  assert.deepEqual(r.jobs, []);
+});
+
+test("parseCli: a flag value is not mistaken for the URL", () => {
+  const { jobs } = parseCli(["--out", "audits", "https://x.gov/pay"]);
+  assert.equal(jobs[0].url, "https://x.gov/pay"); // not "audits"
+  assert.equal(jobs[0].out, "audits");
+});
+
+test("parseCli: --no-video / --md booleans", () => {
+  const { jobs } = parseCli(["https://x.gov/", "--no-video", "--md"]);
+  assert.equal(jobs[0].video, false);
+  assert.equal(jobs[0].md, true);
+});
+
+test("parseCli: repeated cookies join and header splits on first colon", () => {
+  const { jobs } = parseCli([
+    "https://x.gov/", "--cookie", "a=1", "--cookie", "b=2", "--header", "Authorization: Bearer z",
+  ]);
+  assert.equal(jobs[0].auth.cookies, "a=1; b=2");
+  assert.deepEqual(jobs[0].auth.headers, { Authorization: "Bearer z" });
+});
+
+test("parseCli: --crawl surfaces crawl bounds", () => {
+  const { crawlOpts } = parseCli(["https://x.gov/", "--crawl", "--max-pages", "5"]);
+  assert.equal(crawlOpts.maxPages, "5");
+});
+
+test("parseCli: no URL throws usageError", () => {
+  assert.throws(() => parseCli([]), e => e.usage === true);
+});
