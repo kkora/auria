@@ -22,5 +22,5 @@ export function buildJunit(analysis, { url }) {
   cases.push(strictCase("zoom-200pct", analysis.strict.zoom200 > 0, `overflows by ${analysis.strict.zoom200}px (WCAG 1.4.4)`));
   cases.push(strictCase("keyboard-trap", analysis.keyboardTrap.status === "trap", `focus stuck on ${analysis.keyboardTrap.at} (WCAG 2.1.2)`));
   const failures = (cases.join("\n").match(/<failure/g) || []).length;
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<testsuite name="a11y-video-audit ${xmlEsc(url)}" tests="${cases.length}" failures="${failures}">\n${cases.join("\n")}\n</testsuite>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<testsuite name="auria ${xmlEsc(url)}" tests="${cases.length}" failures="${failures}">\n${cases.join("\n")}\n</testsuite>\n`;
 }
