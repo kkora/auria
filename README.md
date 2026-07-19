@@ -50,6 +50,7 @@ node bin/auria.mjs --config examples/pages.sample.json
 
 | Doc | What |
 | --- | --- |
+| [docs/guides/](docs/guides/README.md) | **Step-by-step how-to guides for each feature** (start here) |
 | [docs/PLAN.md](docs/PLAN.md) | Product & extraction plan, monetization, SaaS architecture |
 | [docs/cli.md](docs/cli.md) | Full flag + config reference |
 | [docs/crawl.md](docs/crawl.md) | Site crawler + include/exclude filters |
