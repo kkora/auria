@@ -70,6 +70,9 @@ _(things I chose without asking; override any you disagree with)_
 - **End-to-end verification on the platforms I couldn't test here** (this box is Windows with no NVDA and no espeak-ng): (a) the narrated video on Linux/macOS with espeak-ng; (b) real NVDA capture/re-voice with NVDA + `npx @guidepup/setup` installed. Both are ported verbatim and unit/path-tested; only full end-to-end on those platforms is unverified.
 - Consider committed platform-guarded integration tests (Windows-video, Linux-espeak-video, NVDA) for regression protection; the pure seams (`parseWav`, `rateToWpm`, `buildNarration`) are already unit-tested.
 
+11. **Rebrand** — SARIF driver name + JUnit testsuite prefix `a11y-video-audit` → `auria` (with tests). No other branded strings remained.
+12. **Neural TTS backend (Piper)** — `src/narrate/tts-piper.mjs`: offline neural engine (Piper binary + `.onnx` voice), native PCM WAV, no network/npm dep. `getTts()` refactored to a pure `selectEngine(env, platform)` with precedence: explicit `AURIA_TTS` → `PIPER_VOICE`-auto-Piper → Windows System.Speech → espeak-ng. `lengthScale` maps rate→Piper speed; clear guidance if no model. Unit +6 (selection matrix + Piper). **Smoke-tested:** `AURIA_TTS=piper` routes to Piper, throws model-guidance, falls back to reports. Documented in [guides/narrated-video.md](guides/narrated-video.md#choosing-a-tts-engine).
+
 ## Final status
 
-**All P1 features are ported and merged to `develop`.** No `src/` scaffold stubs remain. Tests: unit 56, integration 15, all green. Every commit is kkora-only. `master` remains locked (release is your call).
+**All P1 features ported + two enhancements done, merged to `develop`.** No `src/` scaffold stubs remain. Tests: **unit 62, integration 15, all green.** Every commit is kkora-only. `master` remains locked (release is your call). Three narration engines available (System.Speech / espeak-ng / Piper-neural) behind one seam.

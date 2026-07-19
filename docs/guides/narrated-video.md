@@ -52,6 +52,31 @@ audio through the **`tts` seam**, recorded via Playwright, captioned, and muxed 
 - **Other OSes**: narration routes through the cross-platform TTS path. If no TTS is
   available, use `--no-video` — the audit and all reports still run everywhere.
 
+### Choosing a TTS engine
+
+The narration engine is chosen by the `AURIA_TTS` environment variable (and, for the
+neural engine, the presence of a voice model). Precedence:
+
+1. `AURIA_TTS=piper|windows|crossplatform` — explicit override.
+2. `PIPER_VOICE` set → **Piper** (neural, offline, best quality, any OS).
+3. Windows → **System.Speech**.
+4. otherwise → **espeak-ng** (cross-platform, offline).
+
+| Engine | Quality | Setup |
+| --- | --- | --- |
+| System.Speech | good | none (built into Windows) |
+| espeak-ng | robotic | `apt install espeak-ng` / `brew install espeak-ng` |
+| **Piper** (neural) | **best** | download the `piper` binary + a `.onnx` voice, then `PIPER_VOICE=/path/to/voice.onnx` (optionally `PIPER_BIN=/path/to/piper`) |
+
+```bash
+# High-quality neural narration on any OS:
+PIPER_VOICE=~/voices/en_US-amy-medium.onnx node bin/auria.mjs https://example.gov/checkout
+```
+
+All engines emit the same PCM-WAV contract, so the rest of the pipeline is identical.
+If the selected engine is unavailable, the video step warns and Auria still writes all
+reports (never a hard failure).
+
 The narrated screen-reader walk is a **simulation** built from the page's ARIA + axe
 output. For *real* screen-reader speech in the video, see [Real NVDA mode](nvda-mode.md)
 — with `--nvda`, captured NVDA phrases are re-voiced by the same TTS voice.

@@ -5,25 +5,30 @@
 //     Render each narration line to a WAV file; return their paths in order.
 //
 // getTts() picks an engine by platform/env so the rest of narrate/record depends
-// ONLY on this interface, never on System.Speech directly:
-//   - Windows (default)      -> tts-windows.mjs   (System.Speech via gen-voice.ps1)
-//   - AURIA_TTS=crossplatform -> tts-crossplatform.mjs (Piper / edge-tts)
-//   - non-Windows            -> tts-crossplatform.mjs
+// ONLY on this interface, never on System.Speech directly. Precedence:
+//   1. AURIA_TTS=piper|windows|crossplatform  — explicit override
+//   2. PIPER_VOICE set                          -> tts-piper.mjs (neural, best quality)
+//   3. Windows                                  -> tts-windows.mjs (System.Speech)
+//   4. otherwise                                -> tts-crossplatform.mjs (espeak-ng)
 //
-// This is what lets a Linux SaaS worker produce the same narrated video (see
-// docs/PLAN.md §5). Do NOT bypass it.
-
+// All engines honor the same contract: synth(lines, { voice, rate, outDir }) renders
+// each line to seg-<i>.wav as PCM WAV (record.mjs's WAV assembly stays engine-agnostic).
+// This is what lets a Linux SaaS worker produce the same narrated video (PLAN §5).
 import process from "node:process";
 
-export async function getTts() {
-  const wantCross =
-    process.env.AURIA_TTS === "crossplatform" || process.platform !== "win32";
-  const mod = wantCross
-    ? await import("./tts-crossplatform.mjs")
-    : await import("./tts-windows.mjs");
-  return mod.default ?? mod;
+const ENGINES = {
+  piper: "./tts-piper.mjs",
+  windows: "./tts-windows.mjs",
+  crossplatform: "./tts-crossplatform.mjs",
+};
+
+export function selectEngine(env = process.env, platform = process.platform) {
+  if (env.AURIA_TTS && ENGINES[env.AURIA_TTS]) return env.AURIA_TTS;
+  if (env.PIPER_VOICE) return "piper";
+  return platform === "win32" ? "windows" : "crossplatform";
 }
 
-// TODO(port): define the exact synth() signature + WAV contract once the Windows
-// impl is ported, then make the cross-platform impl match it byte-format-wise
-// (same sample rate / channels so record.mjs's WAV assembly stays engine-agnostic).
+export async function getTts() {
+  const mod = await import(ENGINES[selectEngine()]);
+  return mod.default ?? mod;
+}
