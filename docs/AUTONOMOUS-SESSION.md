@@ -42,7 +42,11 @@ _(after slice 8: unit 52, integration 14, all green — feature-complete P1 CLI 
 
 9. **Real NVDA mode** (`src/nvda.mjs` `nvdaPreflight` + wired into `runAudit`) — with `--nvda`, launches a headed browser, starts NVDA via @guidepup, passes the driver to `walkTabOrder` (captures real spoken phrases per tab stop), sets `nvdaUsed` (so the report + video re-voice real NVDA output), and stops the driver in `finally`. Unavailable NVDA → a clear "install NVDA + `npx @guidepup/setup`" error; the audit fails that job cleanly (exit 1) rather than hanging. Unit +1 (forced-unavailable override), integration +1 (guidance path). **Smoke-tested:** `--nvda` on this box (no NVDA installed) surfaces the guidance and exits 1. The NVDA-installed capture/re-voice path is ported verbatim but not verifiable here (no NVDA).
 
-Totals after slice 9: **unit 53, integration 15, all green.**
+_(after slice 9: unit 53, integration 15, all green.)_
+
+10. **Cross-platform TTS** (`src/narrate/tts-crossplatform.mjs`) — offline CLI backend: shells to **espeak-ng → espeak → macOS `say`** (preference order), rendering each line to `seg-<i>.wav` PCM WAV, matching the Windows engine's contract. Zero network, no bundled binary. `rateToWpm` maps our -10..10 rate to WPM. Clear install guidance if no engine is found. Unit +3 (rate mapping always; no-engine guidance + real-WAV render self-adapt to the environment). **Smoke-tested:** with `AURIA_TTS=crossplatform` on this engine-less box, the `getTts()` seam routes here, synth throws the guidance, and `runAudit` falls back to reports-only (exit 0). The `getTts()` seam already routed to it — no wiring change needed. On Linux/macOS with espeak-ng installed the video renders normally (covered by the render test there).
+
+Totals after slice 10: **unit 56, integration 15, all green. Every `src/` module is now implemented — no scaffold stubs remain.** Auria is fully ported: analysis, all report formats, dashboards, screenshots, crawl, narrated video (Windows System.Speech + cross-platform espeak-ng), and real NVDA mode.
 
 ## Decisions I made autonomously
 
@@ -62,6 +66,10 @@ _(things I chose without asking; override any you disagree with)_
 ## Future enhancements (deferred, not bugs)
 
 - Rebrand the SARIF driver name and JUnit testsuite prefix from `"a11y-video-audit"` to `"auria"` (kept verbatim during the port to avoid behavior change; do as a deliberate, tested change).
-- **Cross-platform TTS** (`src/narrate/tts-crossplatform.mjs`) — still a decision-pending stub (Piper vs edge-tts, PLAN §9.3). Until it lands, the narrated video only works on Windows; on Linux/SaaS the video step throws and `runAudit` falls back to reports-only. The `getTts()` seam already routes to it, so implementing it behind the same `synth(lines,{voice,rate,outDir})->wavPath[]` contract is all that's needed.
-- **Real NVDA mode** (`src/nvda.mjs` + `--nvda`) — not wired; `runAudit` throws a clear error if requested. Port the guidepup driver + re-voicing when desired.
-- Consider a committed Windows-only video integration test (self-skipping off-Windows) for regression protection; smoke-tested manually this session.
+- **Higher-quality cross-platform TTS**: the shipped cross-platform engine uses espeak-ng (robotic but zero-cost/offline). A neural backend (Piper offline, or edge-tts networked) behind the same `synth()` contract would sound far better for the SaaS — drop-in via `getTts()`.
+- **End-to-end verification on the platforms I couldn't test here** (this box is Windows with no NVDA and no espeak-ng): (a) the narrated video on Linux/macOS with espeak-ng; (b) real NVDA capture/re-voice with NVDA + `npx @guidepup/setup` installed. Both are ported verbatim and unit/path-tested; only full end-to-end on those platforms is unverified.
+- Consider committed platform-guarded integration tests (Windows-video, Linux-espeak-video, NVDA) for regression protection; the pure seams (`parseWav`, `rateToWpm`, `buildNarration`) are already unit-tested.
+
+## Final status
+
+**All P1 features are ported and merged to `develop`.** No `src/` scaffold stubs remain. Tests: unit 56, integration 15, all green. Every commit is kkora-only. `master` remains locked (release is your call).
