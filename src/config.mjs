@@ -16,3 +16,19 @@ export const slugify = s => s.replace(/^\/+|\/+$/g, "")
   .replace(/\.[a-z0-9]+$/i, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "home";
 
 export const slugFromUrl = u => slugify(new URL(u).pathname);
+
+// Auth: cookies as "n=v; n2=v2" or [{name, value, domain?, path?}]; headers as {Name: value}.
+// Values are used only to drive the browser and never appear in reports (counts only).
+export function normalizeAuth(auth, url) {
+  if (!auth) return { cookies: [], headers: {} };
+  let cookies = [];
+  if (typeof auth.cookies === "string") {
+    cookies = auth.cookies.split(";").map(s => s.trim()).filter(Boolean).map(s => {
+      const i = s.indexOf("=");
+      return { name: s.slice(0, i).trim(), value: s.slice(i + 1).trim(), url };
+    });
+  } else if (Array.isArray(auth.cookies)) {
+    cookies = auth.cookies.map(c => (c.domain || c.url) ? c : { ...c, url });
+  }
+  return { cookies, headers: auth.headers || {} };
+}
