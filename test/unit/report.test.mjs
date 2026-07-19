@@ -24,7 +24,7 @@ test("buildSarif: schema, version, deduped rules, level mapping, url location", 
   const s = buildSarif(analysis, { url: URL });
   assert.equal(s.version, "2.1.0");
   assert.equal(s.$schema, "https://json.schemastore.org/sarif-2.1.0.json");
-  assert.equal(s.runs[0].tool.driver.name, "a11y-video-audit"); // verbatim, rebrand later
+  assert.equal(s.runs[0].tool.driver.name, "auria");
   const rules = s.runs[0].tool.driver.rules;
   assert.deepEqual(rules.map(r => r.id).sort(), ["color-contrast", "image-alt"]);
   const results = s.runs[0].results;
@@ -41,7 +41,7 @@ test("buildJunit: testsuite counts, failure counting, xml escaping", () => {
   const xml = buildJunit(analysis, { url: URL });
   // cases: 2 axe rules (Desktop) + 1 empty 'axe scan' (Phone) + reflow/zoom/keyboard = 6
   // failures: image-alt + color-contrast + reflow-320 (12>0) = 3 (zoom 0, trap pass = clean)
-  assert.match(xml, /<testsuite name="a11y-video-audit https:\/\/x\.gov\/pay" tests="6" failures="3">/);
+  assert.match(xml, /<testsuite name="auria https:\/\/x\.gov\/pay" tests="6" failures="3">/);
   assert.ok(xml.includes('<testcase classname="axe.Phone" name="axe scan"/>'));
   assert.ok(xml.includes('name="reflow-320px"'));
   assert.match(xml, /overflows by 12px/);

@@ -34,7 +34,7 @@ export function buildSarif(analysis, { url }) {
     $schema: "https://json.schemastore.org/sarif-2.1.0.json",
     version: "2.1.0",
     runs: [{
-      tool: { driver: { name: "a11y-video-audit", version: "1.0.0", rules: [...rules.values()] } },
+      tool: { driver: { name: "auria", version: "1.0.0", rules: [...rules.values()] } },
       results,
     }],
   };
