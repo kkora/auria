@@ -8,12 +8,13 @@ import os from "node:os";
 import { rateToWpm, detectEngine, synth } from "../../src/narrate/tts-crossplatform.mjs";
 import { parseWav } from "../../src/record.mjs";
 
-test("rateToWpm: maps -10..10 onto a clamped WPM range", () => {
-  assert.equal(rateToWpm(0), 175);
-  assert.equal(rateToWpm(1), 187);
-  assert.equal(rateToWpm(10), 295);
-  assert.equal(rateToWpm(-10), 80);   // 175-120=55 -> clamped to 80
-  assert.equal(rateToWpm(undefined), 187); // default rate 1
+test("rateToWpm: calm default pace, maps -10..10 onto a clamped WPM range", () => {
+  assert.equal(rateToWpm(1), 150);        // default: a calm narration pace
+  assert.equal(rateToWpm(undefined), 150); // default rate 1
+  assert.equal(rateToWpm(0), 138);
+  assert.equal(rateToWpm(10), 258);       // faster on request
+  assert.equal(rateToWpm(-10), 80);       // 138-120=18 -> clamped to 80
+  assert.ok(rateToWpm(1) < 175, "default is slower than espeak's rushed 175+ default");
 });
 
 test("synth: clear guidance when no TTS engine is installed", async () => {
