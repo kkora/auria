@@ -44,10 +44,18 @@ test("strict: reflow320 and zoom200 both report overflow on the broken fixture",
 
 test("axe: surfaces the image-alt violation on the broken fixture", opts, async () => {
   const page = await openFixture(browser, FIXTURE);
-  const axe = await runAxe(page, VIEWPORTS);
-  const all = Object.values(axe).flat();
+  const { byViewport } = await runAxe(page, VIEWPORTS);
+  const all = Object.values(byViewport).flat();
   assert.ok(!all.some(v => v.id === "scan-failed"), "axe scan should not fail on a file:// fixture");
   assert.ok(all.some(v => v.id === "image-alt"), "expected the image-alt violation (fixture <img> has no alt)");
+  await page.context().close();
+});
+
+test("axe: { passes: true } reports the criteria axe tested and passed", opts, async () => {
+  const page = await openFixture(browser, FIXTURE);
+  const { passedSc } = await runAxe(page, VIEWPORTS, { passes: true });
+  assert.ok(Array.isArray(passedSc) && passedSc.length > 0, "expected some passed WCAG criteria");
+  assert.ok(passedSc.every(sc => /^\d\.\d\.\d+$/.test(sc)), "each is an SC like 1.4.3");
   await page.context().close();
 });
 

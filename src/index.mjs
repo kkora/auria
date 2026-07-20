@@ -90,7 +90,11 @@ export async function runAudit(job) {
       }));
       analysis.title = await page.title();
       analysis.headings = await readHeadings(page);
-      analysis.axe = await runAxe(page, viewports);
+      // Collect axe's passed criteria too when a VPAT is requested, so criteria axe
+      // tested-and-passed become a confident "Supports" (heavier, hence opt-in).
+      const axeResult = await runAxe(page, viewports, { passes: !!job.vpat });
+      analysis.axe = axeResult.byViewport;
+      analysis.axePassedSc = axeResult.passedSc;
       analysis.viewportMeta = await readViewportMeta(page);
       analysis.layout = await runLayout(page, viewports);
       if (job.screenshots) analysis.screenshots = await captureScreenshots(page, analysis, { viewports, outDir, name });

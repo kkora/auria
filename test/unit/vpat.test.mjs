@@ -88,6 +88,16 @@ test("buildVpat: criteria Auria doesn't cover are Not Evaluated", () => {
   assert.match(md, /\| 1\.4\.13 Content on Hover or Focus \| Not Evaluated \|/);
 });
 
+test("buildVpat: axe-passed criteria become Supports (from analysis.axePassedSc)", () => {
+  // 1.4.1 Use of Color has no finding and Auria doesn't check it -> normally Not Evaluated,
+  // but if axe tested and passed it, it becomes Supports.
+  const withPasses = { ...analysis, axePassedSc: ["1.4.1", "1.1.1"] };
+  const md = buildVpat(withPasses, { url: analysis.url });
+  assert.match(md, /\| 1\.4\.1 Use of Color \| Supports \|.*axe/);
+  // 1.1.1 has a violation, so a "pass" elsewhere must NOT override it to Supports
+  assert.match(md, /\| 1\.1\.1 Non-text Content \| Partially Supports \|/);
+});
+
 test("buildVpat: SECURITY — never emits auth values", () => {
   const withAuth = { ...analysis, url: "https://x.gov/pay?token=SECRET" };
   // buildVpat only receives analysis + a url; there is no auth channel, but assert the
