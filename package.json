@@ -1,8 +1,12 @@
 {
   "name": "auria",
   "version": "0.2.0",
-  "description": "Accessibility + responsive-layout auditor: URL in -> narrated video, axe/layout/keyboard reports (MD/PDF/JSON/SARIF/JUnit), and dashboards out.",
+  "description": "Accessibility + responsive-layout auditor: URL in -> narrated video, axe/layout/keyboard reports (MD/PDF/JSON/SARIF/JUnit), VPAT/ACR compliance, and dashboards out.",
   "type": "module",
+  "author": "kkora <kora.kanchan@gmail.com>",
+  "repository": { "type": "git", "url": "git+https://github.com/kkora/auria.git" },
+  "bugs": { "url": "https://github.com/kkora/auria/issues" },
+  "homepage": "https://github.com/kkora/auria#readme",
   "bin": {
     "auria": "bin/auria.mjs"
   },
@@ -15,7 +19,8 @@
     "src",
     "assets",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "start": "node bin/auria.mjs",
