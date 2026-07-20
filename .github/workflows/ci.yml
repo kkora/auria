@@ -53,3 +53,12 @@ jobs:
           test -s out/site/container/container-report.pdf || { echo "::error::no PDF produced";      exit 1; }
           test -s out/site/container/container-axe.json   || { echo "::error::no axe.json produced"; exit 1; }
           echo "P2 proof OK — narrated video + PDF + axe.json produced in a Linux container."
+      # Download these from the run's "Artifacts" section to view the container-produced
+      # narrated video (.mp4), PDF, JSON, and dashboards.
+      - name: Upload the container-generated audit output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-audit-output
+          path: out/
+          if-no-files-found: warn
