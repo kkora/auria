@@ -208,6 +208,10 @@ Web app (Next.js)  ──►  API (REST) ──►  Job queue (Redis/BullMQ or S
    enterprise build alongside. **Design:** [p4-saas-design.md](p4-saas-design.md) (awaiting
    sign-off before any code; the SaaS lives in a separate repo, not this OSS engine).
 
+**Beyond P4** — once the platform is built, the focus shifts from building to distribution
+and the compliance moat (pilots, human-in-the-loop ACR completion, FedRAMP, CI/CD +
+monitoring): [roadmap-post-p4.md](roadmap-post-p4.md).
+
 ---
 
 ## 9. Open items
