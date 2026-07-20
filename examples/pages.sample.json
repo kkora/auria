@@ -4,8 +4,8 @@
   "pdf": true,
   "tabs": 10,
   "pages": [
-    { "url": "https://web-staging.paymentportal.example.gov/transactions/abc123", "name": "payment-page", "tabs": 14 },
-    { "url": "https://web-staging.paymentportal.example.gov/receipt/abc123", "name": "receipt-page" },
-    { "url": "https://web-staging.paymentportal.example.gov/" }
+    { "url": "https://web-staging.paymentportal.example.com/transactions/abc123", "name": "payment-page", "tabs": 14 },
+    { "url": "https://web-staging.paymentportal.example.com/receipt/abc123", "name": "receipt-page" },
+    { "url": "https://web-staging.paymentportal.example.com/" }
   ]
 }

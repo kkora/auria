@@ -19,7 +19,7 @@ A link is followed only if it matches `include` (when set) **and** not `exclude`
 Matching semantics (important):
 
 - Tested against the **full normalized URL** (scheme + host + path), e.g.
-  `https://example.gov/about?ref=nav` — so `"^/about"` never matches; use `"/about"`.
+  `https://example.com/about?ref=nav` — so `"^/about"` never matches; use `"/about"`.
 - **Unanchored** (substring); anchor deliberately with `$` or a path boundary.
 - **Case-sensitive** (no `i` flag); use a class like `"[Bb]log"`.
 - JSON string → **double every backslash**: literal dot `"\\."`, digit `"\\d"`.

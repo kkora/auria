@@ -3,7 +3,7 @@
 #
 #   docker build -t auria .
 #   docker run --rm -v "$PWD/out:/out" auria \
-#     https://example.gov/page --out /out            # analysis + reports + narrated video
+#     https://example.com/page --out /out            # analysis + reports + narrated video
 #
 # Narration uses espeak-ng (the cross-platform TTS engine, auto-selected on Linux). For
 # higher-quality neural narration, mount a Piper voice and set PIPER_VOICE/PIPER_BIN.

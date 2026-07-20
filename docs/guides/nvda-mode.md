@@ -37,7 +37,7 @@ Success prints `Environment setup complete 🎉`.
 ## Step 3 — Run an audit with `--nvda`
 
 ```bash
-node bin/auria.mjs https://example.gov/checkout --nvda
+node bin/auria.mjs https://example.com/checkout --nvda
 ```
 
 Or in a config file: `{ "nvda": true }`. Auria will:

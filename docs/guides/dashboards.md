@@ -16,8 +16,8 @@ Two levels are generated under your output base:
 ```
 a11y-audits/
   index.html            ← GLOBAL: every host, every page
-  example.gov/
-    index.html          ← PER-HOST: every page on example.gov
+  example.com/
+    index.html          ← PER-HOST: every page on example.com
     checkout/ ...
     receipt/  ...
 ```

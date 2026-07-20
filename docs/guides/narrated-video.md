@@ -9,15 +9,15 @@ keyboard order. This is Auria's signature output for non-technical stakeholders.
 Video is **on by default** — a plain run makes it:
 
 ```bash
-node bin/auria.mjs https://example.gov/checkout
+node bin/auria.mjs https://example.com/checkout
 ```
 
-Result: `a11y-audits/example.gov/checkout/checkout.mp4`.
+Result: `a11y-audits/example.com/checkout/checkout.mp4`.
 
 ## Step 2 — Choose the container format
 
 ```bash
-node bin/auria.mjs https://example.gov/checkout --format webm
+node bin/auria.mjs https://example.com/checkout --format webm
 ```
 
 - `--format mp4` (default) — widest compatibility.
@@ -26,7 +26,7 @@ node bin/auria.mjs https://example.gov/checkout --format webm
 ## Step 3 — Pick the voice and speed
 
 ```bash
-node bin/auria.mjs https://example.gov/checkout --voice "Microsoft Zira" --rate 2
+node bin/auria.mjs https://example.com/checkout --voice "Microsoft Zira" --rate 2
 ```
 
 - `--voice "<name>"` — an installed TTS voice (default `Zira` on Windows).
@@ -37,7 +37,7 @@ node bin/auria.mjs https://example.gov/checkout --voice "Microsoft Zira" --rate 
 The recording + narration pass is the slow part. During fix-and-recheck:
 
 ```bash
-node bin/auria.mjs https://example.gov/checkout --no-video
+node bin/auria.mjs https://example.com/checkout --no-video
 ```
 
 Then drop `--no-video` for the final shareable render.
@@ -70,7 +70,7 @@ neural engine, the presence of a voice model). Precedence:
 
 ```bash
 # High-quality neural narration on any OS:
-PIPER_VOICE=~/voices/en_US-amy-medium.onnx node bin/auria.mjs https://example.gov/checkout
+PIPER_VOICE=~/voices/en_US-amy-medium.onnx node bin/auria.mjs https://example.com/checkout
 ```
 
 #### Installing Piper (neural)
@@ -84,7 +84,7 @@ PIPER_VOICE=~/voices/en_US-amy-medium.onnx node bin/auria.mjs https://example.go
    ```powershell
    $env:PIPER_BIN   = "C:\tools\piper\piper.exe"   # optional if piper is on PATH
    $env:PIPER_VOICE = "C:\tools\piper\voices\en_US-amy-medium.onnx"
-   node bin/auria.mjs https://example.gov/checkout
+   node bin/auria.mjs https://example.com/checkout
    ```
 
 Either Piper build works — the classic **rhasspy/piper** (`--output_file` / `--length_scale`)
@@ -103,7 +103,7 @@ output. For *real* screen-reader speech in the video, see [Real NVDA mode](nvda-
 
 ```jsonc
 { "format": "webm", "voice": "Microsoft David", "rate": 2,
-  "pages": [{ "url": "https://example.gov/checkout" }] }
+  "pages": [{ "url": "https://example.com/checkout" }] }
 ```
 
 ## Related

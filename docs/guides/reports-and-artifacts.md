@@ -19,7 +19,7 @@ Every file a run emits, what it's for, and how to turn each format on. Reference
 ## Step 1 — Turn on the formats you need
 
 ```bash
-node bin/auria.mjs https://example.gov/checkout \
+node bin/auria.mjs https://example.com/checkout \
   --md --sarif --junit --screenshots
 ```
 

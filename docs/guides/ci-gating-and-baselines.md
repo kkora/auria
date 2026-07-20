@@ -5,7 +5,7 @@ Fail a build when accessibility regresses, and diff each run against the last.
 ## Step 1 — Gate the build on severity (`--fail-on`)
 
 ```bash
-node bin/auria.mjs https://example.gov/checkout --no-video --fail-on serious
+node bin/auria.mjs https://example.com/checkout --no-video --fail-on serious
 ```
 
 The process **exits code 2** when any violation at or above the given level exists.
@@ -22,7 +22,7 @@ Config equivalent: `"failOn": "serious"` (top-level or per-page).
 ## Step 2 — Emit machine-readable results
 
 ```bash
-node bin/auria.mjs https://example.gov/checkout --no-video --sarif --junit
+node bin/auria.mjs https://example.com/checkout --no-video --sarif --junit
 ```
 
 - `--sarif` → `<page>.sarif` for GitHub/Azure **code-scanning / Security** tabs.
@@ -35,13 +35,13 @@ each violation as **new / fixed / unchanged** — turning a snapshot into regres
 tracking.
 
 ```bash
-node bin/auria.mjs https://example.gov/checkout --no-video --baseline auto
+node bin/auria.mjs https://example.com/checkout --no-video --baseline auto
 ```
 
 Or pin a specific file:
 
 ```bash
-node bin/auria.mjs https://example.gov/checkout --baseline ./golden/checkout-axe.json
+node bin/auria.mjs https://example.com/checkout --baseline ./golden/checkout-axe.json
 ```
 
 Config equivalent: `"baseline": "auto"`.

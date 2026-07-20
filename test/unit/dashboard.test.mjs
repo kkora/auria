@@ -7,8 +7,8 @@ import os from "node:os";
 import { collectRows, renderDashboard, writeDashboards } from "../../src/dashboard.mjs";
 
 const rows = [
-  { host: "example.gov", page: "pay", date: "2026-07-19", url: "https://example.gov/pay", viol: 3, layoutIssues: 0, artifacts: ["pay-report.pdf"] },
-  { host: "example.gov", page: "home", date: "2026-07-19", url: "https://example.gov/", viol: 0, layoutIssues: 2, artifacts: [] },
+  { host: "example.com", page: "pay", date: "2026-07-19", url: "https://example.com/pay", viol: 3, layoutIssues: 0, artifacts: ["pay-report.pdf"] },
+  { host: "example.com", page: "home", date: "2026-07-19", url: "https://example.com/", viol: 0, layoutIssues: 2, artifacts: [] },
 ];
 
 test("renderDashboard: chips reflect counts, links + host shown, date injected", () => {
@@ -18,7 +18,7 @@ test("renderDashboard: chips reflect counts, links + host shown, date injected",
   assert.ok(html.includes('<span class="chip ok">0 issues</span>'));        // pay has no layout issues
   assert.ok(html.includes('<span class="chip bad">2 issues</span>'));       // home has layout issues
   assert.ok(html.includes('<a href="pay/pay-report.pdf">pdf</a>'));         // artifact link + label
-  assert.ok(html.includes('<div class="host">example.gov</div>'));          // showHost subtitle
+  assert.ok(html.includes('<div class="host">example.com</div>'));          // showHost subtitle
   assert.ok(html.includes(">—<"), "a page with no artifacts shows a dash");
 });
 
@@ -32,10 +32,10 @@ test("renderDashboard: escapes html in fields", () => {
 
 test("collectRows + writeDashboards: scans an output tree and writes indexes", async () => {
   const base = path.join(os.tmpdir(), `auria-dash-${process.pid}`);
-  const dir = path.join(base, "example.gov", "pay");
+  const dir = path.join(base, "example.com", "pay");
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, "pay-axe.json"), JSON.stringify({
-    url: "https://example.gov/pay", date: "2026-07-19",
+    url: "https://example.com/pay", date: "2026-07-19",
     axe: { Desktop: [{ id: "image-alt" }], Phone: [] },
     layout: { Phone: { overflowPx: 2000, smallTargets: [{}], tinyText: [] } },
   }));
@@ -50,8 +50,8 @@ test("collectRows + writeDashboards: scans an output tree and writes indexes", a
     const written = await writeDashboards(base);
     assert.equal(written.length, 2);              // global + one per-host
     const global = await readFile(path.join(base, "index.html"), "utf8");
-    assert.ok(global.includes("example.gov/pay/pay-report.pdf")); // global links reach down
-    const perHost = await readFile(path.join(base, "example.gov", "index.html"), "utf8");
+    assert.ok(global.includes("example.com/pay/pay-report.pdf")); // global links reach down
+    const perHost = await readFile(path.join(base, "example.com", "index.html"), "utf8");
     assert.ok(perHost.includes("pay/pay-report.pdf"));            // per-host links are shallower
     assert.ok(!perHost.includes('<div class="host">'));          // host subtitle hidden per-host
   } finally {

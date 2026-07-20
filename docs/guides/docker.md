@@ -30,14 +30,14 @@ Mount an output directory and pass a URL (all the usual flags work):
 mkdir -p out
 
 # Full audit + narrated video (mp4 by default):
-docker run --rm -v "$PWD/out:/out" auria https://example.gov/page --out /out --name page
+docker run --rm -v "$PWD/out:/out" auria https://example.com/page --out /out --name page
 
 # Fast analysis-only (no video), with CI artifacts:
-docker run --rm -v "$PWD/out:/out" auria https://example.gov/page \
+docker run --rm -v "$PWD/out:/out" auria https://example.com/page \
   --out /out --name page --no-video --sarif --junit
 
 # Whole site:
-docker run --rm -v "$PWD/out:/out" auria https://example.gov/ --crawl --out /out
+docker run --rm -v "$PWD/out:/out" auria https://example.com/ --crawl --out /out
 ```
 
 Artifacts land under `out/<host>/<page>/` on the host: `.mp4`/`.webm`, `-report.pdf`,
@@ -53,7 +53,7 @@ Piper — see [narrated-video.md](narrated-video.md#installing-piper-neural)):
 docker run --rm \
   -v "$PWD/out:/out" -v "$PWD/piper:/piper" \
   -e PIPER_BIN=/piper/piper -e PIPER_VOICE=/piper/en_US-amy-medium.onnx \
-  auria https://example.gov/page --out /out
+  auria https://example.com/page --out /out
 ```
 
 ## CI proof

@@ -29,14 +29,14 @@ crawler, and per-host + global dashboards.
 
 ```bash
 npm install
-node bin/auria.mjs https://example.gov/payment-page
+node bin/auria.mjs https://example.com/payment-page
 ```
 
 Analysis-only fast loop (no video), a whole site, or many pages from a config:
 
 ```bash
-node bin/auria.mjs https://example.gov/payment-page --no-video
-node bin/auria.mjs https://example.gov/ --crawl --max-pages 20
+node bin/auria.mjs https://example.com/payment-page --no-video
+node bin/auria.mjs https://example.com/ --crawl --max-pages 20
 node bin/auria.mjs --config examples/pages.sample.json
 ```
 
