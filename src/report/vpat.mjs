@@ -155,14 +155,11 @@ function resolve(sc, findings, passedSc) {
   return { level: "Not Evaluated", remarks: "Not covered by automated testing — requires manual review." };
 }
 
-export function buildVpat(analysis, {
-  url, title, date, product, version, vendor, contact, description,
+// Shared renderer: a resolved findings map + passed-criteria set -> the VPAT markdown.
+function renderVpat(findings, passedSc, {
+  url, date, product, version, vendor, contact, description, name, scopeNote,
   standard = "WCAG 2.2 Level AA",
 } = {}) {
-  const findings = collectFindings(analysis);
-  const passedSc = new Set(analysis.axePassedSc || []);
-  const name = product || title || analysis.title || url || "the evaluated page";
-
   const table = lvl => [
     "| Criteria | Conformance Level | Remarks and Explanations |",
     "| --- | --- | --- |",
@@ -176,11 +173,11 @@ export function buildVpat(analysis, {
   for (const [sc] of WCAG) { const { level } = resolve(sc, findings, passedSc); tally[level] = (tally[level] || 0) + 1; }
 
   const meta = [
-    `- **Name of Product:** ${product || title || analysis.title || "—"}`,
+    `- **Name of Product:** ${product || name || "—"}`,
     ...(version ? [`- **Version:** ${version}`] : []),
     ...(vendor ? [`- **Vendor / Company:** ${vendor}`] : []),
     `- **URL evaluated:** ${url || "—"}`,
-    `- **Report Date:** ${date || analysis.date || ""}`,
+    `- **Report Date:** ${date || ""}`,
     ...(contact ? [`- **Contact:** ${contact}`] : []),
     ...(description ? [`- **Product Description:** ${description}`] : []),
     `- **Evaluation Methods Used:** Automated audit (Auria — axe-core plus layout, reflow, and keyboard checks). Manual review pending for the "Not Evaluated" rows.`,
@@ -191,6 +188,7 @@ export function buildVpat(analysis, {
   md.push(`# Accessibility Conformance Report (VPAT®) — ${name}`, "",
     `**Report format:** VPAT® 2  ·  **Primary standard:** ${standard}`, "",
     ...meta, "",
+    ...(scopeNote ? [scopeNote, ""] : []),
     "> **This is an auto-generated draft.** Automated testing detects failures but cannot",
     "> prove full conformance. A qualified reviewer must evaluate every **Not Evaluated**",
     "> row (and confirm the automated results) before this report is published or relied on.",
@@ -225,4 +223,34 @@ export function buildVpat(analysis, {
     "Report (Table 1) applies. Chapters 11 (software), 12 (documentation), and the",
     "closed-functionality / interoperability clauses require separate manual review.", "");
   return md.join("\n");
+}
+
+// Single-page report.
+export function buildVpat(analysis, ctx = {}) {
+  const findings = collectFindings(analysis);
+  const passedSc = new Set(analysis.axePassedSc || []);
+  const name = ctx.product || ctx.title || analysis.title || ctx.url || "the evaluated page";
+  return renderVpat(findings, passedSc, { ...ctx, name, date: ctx.date || analysis.date });
+}
+
+// Product-level report aggregating several pages: a criterion fails at the product level
+// if it fails on ANY page; it counts as passed only if some page passed it (and none failed).
+export function buildSiteVpat(analyses, ctx = {}) {
+  const merged = {};
+  const passedSc = new Set();
+  for (const a of analyses) {
+    for (const [sc, msgs] of Object.entries(collectFindings(a))) {
+      const set = (merged[sc] ??= new Set());
+      for (const m of msgs) set.add(m);
+    }
+    for (const sc of a.axePassedSc || []) passedSc.add(sc);
+  }
+  const findings = {};
+  for (const [sc, set] of Object.entries(merged)) {
+    const arr = [...set];
+    findings[sc] = arr.length > 4 ? [...arr.slice(0, 4), `…and ${arr.length - 4} more finding(s) across the site`] : arr;
+  }
+  const name = ctx.product || ctx.title || "the evaluated site";
+  const scopeNote = `> **Site-wide report** aggregating **${analyses.length}** audited page(s). A criterion is marked failing at the product level if it fails on any page.`;
+  return renderVpat(findings, passedSc, { ...ctx, name, scopeNote });
 }

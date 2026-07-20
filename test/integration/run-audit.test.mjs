@@ -82,6 +82,24 @@ test("runAudit: baseline:auto diffs against the previous run", opts, async () =>
   }
 });
 
+test("runJobs: --vpat across multiple pages writes one site-wide VPAT", opts, async () => {
+  const out = path.join(os.tmpdir(), `auria-e2e-sitevpat-${process.pid}`);
+  const crawlA = new URL("../fixtures/crawl-a.html", import.meta.url).href;
+  try {
+    const code = await runJobs([
+      { url: FIXTURE, out, name: "p1", video: false, pdf: false, vpat: true },
+      { url: crawlA, out, name: "p2", video: false, pdf: false, vpat: true },
+    ]);
+    assert.equal(code, 0);
+    // both file:// pages share host "site" -> one aggregated report at <base>/site/
+    const site = await readFile(path.join(out, "site", "site-vpat.md"), "utf8");
+    assert.match(site, /Site-wide report.*aggregating \*\*2\*\*/);
+    assert.match(site, /1\.1\.1 Non-text Content \| Partially Supports/); // broken fixture <img>
+  } finally {
+    await rm(out, { recursive: true, force: true });
+  }
+});
+
 test("runJobs: exit code 0 when all pass, 2 on fail-on breach, 1 when all fail", opts, async () => {
   const out = path.join(os.tmpdir(), `auria-e2e-jobs-${process.pid}`);
   try {

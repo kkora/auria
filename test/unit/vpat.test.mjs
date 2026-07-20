@@ -1,7 +1,7 @@
 // Unit tests for the VPAT/ACR generator — pure function of the analysis object.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildVpat } from "../../src/report/vpat.mjs";
+import { buildVpat, buildSiteVpat } from "../../src/report/vpat.mjs";
 
 const analysis = {
   url: "https://x.gov/pay",
@@ -104,6 +104,20 @@ test("buildVpat: SECURITY — never emits auth values", () => {
   // known-secret string can't appear from the analysis object it's given.
   const md = buildVpat(withAuth, { url: "https://x.gov/pay" });
   assert.ok(!md.includes("SECRET"));
+});
+
+test("buildSiteVpat: aggregates findings across pages (fail on any page fails the product)", () => {
+  const pageA = { ...analysis, axe: { Desktop: [{ id: "image-alt", help: "Images must have alternate text", wcag: ["wcag111"], nodes: ["img"] }] }, axePassedSc: [] };
+  const pageB = { ...analysis, axe: { Desktop: [] }, headings: [{ level: 1, text: "Home" }], viewportMeta: "width=device-width",
+    strict: { reflow320: 0, zoom200: 0 }, tabStops: [{ name: "Home", role: "link" }],
+    layout: { Desktop: { overflowPx: 0, smallTargets: [], tinyText: [] } }, axePassedSc: ["1.4.1"] };
+  const md = buildSiteVpat([pageA, pageB], { product: "Acme Site" });
+  assert.match(md, /Site-wide report.*aggregating \*\*2\*\*/);
+  assert.match(md, /VPAT®\) — Acme Site/);
+  // 1.1.1 fails on page A -> product Partially Supports even though page B is clean
+  assert.match(md, /\| 1\.1\.1 Non-text Content \| Partially Supports \|/);
+  // 1.4.1 passed on page B (axe) and no page failed it -> Supports
+  assert.match(md, /\| 1\.4\.1 Use of Color \| Supports \|/);
 });
 
 test("buildVpat: summary tallies all 55 WCAG 2.2 A/AA criteria", () => {

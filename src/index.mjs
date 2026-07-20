@@ -21,7 +21,7 @@ import { buildMarkdown } from "./report/markdown.mjs";
 import { renderPdf } from "./report/pdf.mjs";
 import { buildSarif } from "./report/sarif.mjs";
 import { buildJunit } from "./report/junit.mjs";
-import { buildVpat } from "./report/vpat.mjs";
+import { buildVpat, buildSiteVpat } from "./report/vpat.mjs";
 import { captureScreenshots } from "./report/screenshots.mjs";
 import { writeDashboards } from "./dashboard.mjs";
 import { recordVideo } from "./record.mjs";
@@ -164,7 +164,11 @@ export async function runAudit(job) {
       // not be counted as a real violation that trips the CI gate.
       failOnBreached = Object.values(analysis.axe).flat().some(v => v.id !== "scan-failed" && (IMPACT_RANK[v.impact] || 0) >= min);
     }
-    return { outDir, outVideo, seconds, violations: totalV, tabStops: analysis.tabStops.length, pdf: wantPdf, failOnBreached, failOn: job.failOn };
+    return {
+      outDir, outVideo, seconds, violations: totalV, tabStops: analysis.tabStops.length, pdf: wantPdf, failOnBreached, failOn: job.failOn,
+      // Carry the analysis for a product-level (site-wide) VPAT aggregation in runJobs.
+      ...(job.vpat ? { vpat: true, host, base: path.resolve(job.out || "a11y-audits", host), analysis } : {}),
+    };
   } finally {
     if (nvdaDriver) await nvdaDriver.stop().catch(() => {});
     if (browser) await browser.close().catch(() => {});
@@ -183,6 +187,25 @@ export async function runJobs(jobs) {
       results.push({ url: job.url, ok: false, error: e.message });
       console.error(`  FAILED: ${e.message}`);
     }
+  }
+
+  // Site-wide VPAT: a VPAT is a product-level document, so aggregate a host's pages into
+  // one report (in addition to the per-page ones) when several pages were audited.
+  const vpatByHost = {};
+  for (const r of results) if (r.ok && r.vpat && r.analysis) (vpatByHost[`${r.base} ${r.host}`] ??= []).push(r);
+  for (const rs of Object.values(vpatByHost)) {
+    if (rs.length < 2) continue; // a single page already has its own VPAT
+    const { base, host } = rs[0];
+    try {
+      const md = buildSiteVpat(rs.map(r => r.analysis), { product: host, date: rs[0].analysis.date });
+      await writeFile(path.join(base, `${host}-vpat.md`), md);
+      if (rs.some(r => r.pdf)) {
+        const browser = await launchBrowser();
+        try { await renderPdf(browser, md, path.join(base, `${host}-vpat.pdf`)); }
+        finally { await browser.close().catch(() => {}); }
+      }
+      console.log(`\nSite VPAT (${rs.length} pages): ${path.join(base, `${host}-vpat.md`)}`);
+    } catch (e) { console.error(`Site VPAT failed for ${host}: ${e.message}`); }
   }
 
   const bases = [...new Set(jobs.map(j => path.resolve(j.out || "a11y-audits")))];

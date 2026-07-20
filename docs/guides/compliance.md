@@ -17,8 +17,15 @@ node bin/auria.mjs https://example.com/page --vpat --out audits
 # writes audits/example.com/page/page-vpat.md  (+ page-vpat.pdf unless --no-pdf)
 ```
 
-Works with everything else — `--crawl --vpat` produces one per page; in a container,
-`docker run … --vpat`.
+In a container: `docker run … --vpat`.
+
+### Whole-site (product-level) report
+
+A VPAT describes a *product*, not a single page — so with `--crawl --vpat` (or a
+multi-page config), Auria also writes **one aggregated report** per host at
+`<out>/<host>/<host>-vpat.md` (+ PDF), in addition to the per-page ones. A criterion is
+marked failing at the product level if it fails on **any** page, and "Supports" only when
+some page verified it and none failed. This is the report you hand to procurement.
 
 ## Add product metadata
 
