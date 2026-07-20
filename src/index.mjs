@@ -144,7 +144,9 @@ export async function runAudit(job) {
     if (job.sarif) await writeFile(path.join(outDir, `${name}.sarif`), JSON.stringify(buildSarif(analysis, { url: job.url }), null, 2));
     if (job.junit) await writeFile(path.join(outDir, `${name}-junit.xml`), buildJunit(analysis, { url: job.url }));
     if (job.vpat) {
-      const vpatMd = buildVpat(analysis, { url: job.url, title: analysis.title, date: analysis.date, product: job.name });
+      // `vpat` may be `true` (CLI flag) or an object of VPAT metadata from the config.
+      const vpatMeta = typeof job.vpat === "object" ? job.vpat : {};
+      const vpatMd = buildVpat(analysis, { url: job.url, title: analysis.title, date: analysis.date, product: job.name, ...vpatMeta });
       await writeFile(path.join(outDir, `${name}-vpat.md`), vpatMd);
       if (wantPdf) await renderPdf(browser, vpatMd, path.join(outDir, `${name}-vpat.pdf`));
     }
