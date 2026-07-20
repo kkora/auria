@@ -1,0 +1,12 @@
+.git
+node_modules
+a11y-audits
+audits
+out
+*.mp4
+*.webm
+*.wav
+.superpowers
+.video-smoke
+.piper-smoke
+docs/_source-monolith.mjs.txt

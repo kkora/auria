@@ -27,6 +27,7 @@ Task-oriented, step-by-step walkthroughs for each Auria feature. These are the
 | [Reports & artifacts](reports-and-artifacts.md) | Understand every file a run emits (PDF, MD, JSON, SARIF, JUnit, screenshots). |
 | [CI gating & baselines](ci-gating-and-baselines.md) | Fail a build on regressions; diff against a previous run. |
 | [Dashboards](dashboards.md) | Browse findings across all audited pages in one place. |
+| [Run in Docker](docker.md) | Run the full audit (incl. narrated video) headless in a Linux container. |
 
 ## Reference docs (not guides)
 
