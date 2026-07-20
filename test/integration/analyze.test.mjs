@@ -57,6 +57,23 @@ test("keyboard: walks tab order and finds no trap on the broken fixture", opts, 
   await page.context().close();
 });
 
+test("keyboard: detects a real trap (WCAG 2.1.2)", opts, async () => {
+  const trapUrl = pathToFileURL(path.join(HERE, "..", "fixtures", "keyboard-trap.html")).href;
+  const page = await openFixture(browser, trapUrl);
+  const trap = await detectKeyboardTrap(page);
+  assert.equal(trap.status, "trap", "focus stuck on #trap should be reported as a trap");
+  assert.match(trap.at, /input#trap/);
+  await page.context().close();
+});
+
+test("keyboard: a page with no focusable elements is not a false trap", opts, async () => {
+  const secretUrl = pathToFileURL(path.join(HERE, "..", "fixtures", "crawl-secret.html")).href;
+  const page = await openFixture(browser, secretUrl);
+  const trap = await detectKeyboardTrap(page); // fixture is just an <h1>, nothing focusable
+  assert.equal(trap.status, "pass");
+  await page.context().close();
+});
+
 test("headings: extracts the visible outline (fixture has one h2, no h1)", opts, async () => {
   const page = await openFixture(browser, FIXTURE);
   const headings = await readHeadings(page);

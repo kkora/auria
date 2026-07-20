@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Keyboard Trap</title></head>
+<body>
+  <h1>Deliberate keyboard trap (WCAG 2.1.2)</h1>
+  <!-- Swallows Tab and re-focuses itself, so keyboard users can never leave. -->
+  <input id="trap" aria-label="trapped field"
+    onkeydown="if(event.key==='Tab'){event.preventDefault();this.focus();}">
+  <a href="#">A link you can never reach by keyboard.</a>
+</body>
+</html>

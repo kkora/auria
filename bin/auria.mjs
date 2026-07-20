@@ -25,6 +25,7 @@ try {
 
   // Crawl expansion: BFS-discover same-origin pages from the seed, then audit each.
   if (crawl && jobs.length) {
+    if (jobs.length > 1) console.error(`Note: crawl uses the first configured page (${jobs[0].url}) as the seed; the other ${jobs.length - 1} listed page(s) are ignored.`);
     const { jobs: expanded, pages, failed } = await expandCrawl(jobs[0], crawl);
     console.log(`Crawl: ${pages.length} pages discovered${failed.length ? `, ${failed.length} unreachable` : ""} (maxPages ${crawl.maxPages ?? 20}, maxDepth ${crawl.maxDepth ?? 3})`);
     jobs = expanded;
