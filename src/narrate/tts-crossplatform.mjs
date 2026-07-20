@@ -12,10 +12,11 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 
-// Our rate is -10..10 (0/1 ≈ default pacing). Map to words-per-minute for the
-// espeak family (`say` uses the same -r WPM scale). Pure — unit-tested.
+// Our rate is -10..10 (0/1 ≈ default pacing). Map to words-per-minute for the espeak
+// family (`say` uses the same -r WPM scale). Default (rate 1) is ~150 WPM — a calm
+// narration pace; espeak's own 175+ default sounds rushed. Pure — unit-tested.
 export function rateToWpm(rate = 1) {
-  const wpm = Math.round(175 + Number(rate || 0) * 12);
+  const wpm = Math.round(138 + Number(rate || 0) * 12);
   return Math.max(80, Math.min(450, wpm));
 }
 
