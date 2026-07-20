@@ -33,11 +33,16 @@ export async function collectRows(base) {
       const viol = Object.values(a.axe || {}).reduce((n, v) => n + v.length, 0);
       const layoutIssues = Object.values(a.layout || {}).reduce((n, L) =>
         n + (L.overflowPx > 1 ? 1 : 0) + (L.smallTargets?.length || 0) + (L.tinyText?.length || 0), 0);
+      // VPAT conformance summary, if the page has a machine-readable VPAT.
+      let vpat = null;
+      const vpatFile = files.find(f => f.endsWith("-vpat.json"));
+      if (vpatFile) { try { vpat = JSON.parse(await readFile(path.join(dir, vpatFile), "utf8")).summary || null; } catch { /* skip malformed */ } }
       rows.push({
-        host: h.name, page: p.name, date: a.date || "", url: a.url || "", viol, layoutIssues,
+        host: h.name, page: p.name, date: a.date || "", url: a.url || "", viol, layoutIssues, vpat,
         // Only artifacts that actually exist, so the Artifacts column never shows an orphan "—".
         artifacts: [files.find(f => /\.(mp4|webm)$/.test(f)), files.find(f => f.endsWith("-report.md")),
-                    files.find(f => f.endsWith("-report.pdf"))].filter(Boolean),
+                    files.find(f => f.endsWith("-report.pdf")),
+                    files.find(f => f.endsWith("-vpat.pdf")) || files.find(f => f.endsWith("-vpat.md"))].filter(Boolean),
       });
     }
   }
@@ -52,7 +57,11 @@ export function renderDashboard(rows, hrefFor, showHost, date = new Date().toISO
     ? `<span class="chip bad">${n} ${label}</span>`
     : `<span class="chip ok">0 ${label}</span>`;
   const links = r => r.artifacts.length
-    ? r.artifacts.map(f => `<a href="${hrefFor(r, f)}">${f.split(".").pop()}</a>`).join(" · ")
+    ? r.artifacts.map(f => `<a href="${hrefFor(r, f)}">${f.includes("-vpat.") ? "vpat" : f.split(".").pop()}</a>`).join(" · ")
+    : "—";
+  // VPAT conformance: failing = partial + does-not-support; the muted line notes what a human still owns.
+  const conf = r => r.vpat
+    ? `${chip(r.vpat.partiallySupports + r.vpat.doesNotSupport, "failing")}<div class="muted">${r.vpat.notEvaluated} not evaluated</div>`
     : "—";
   return `<!doctype html><html lang="en"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -66,18 +75,19 @@ export function renderDashboard(rows, hrefFor, showHost, date = new Date().toISO
   tr:last-child td{border-bottom:0}
   .chip{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.8rem;font-weight:600}
   .ok{background:#E6F4EC;color:#0F6B45}.bad{background:#FDECEA;color:#B3261E}
-  .host{color:#4A5A70;font-size:.85rem} a{color:#1F5FD0}
+  .host,.muted{color:#4A5A70;font-size:.85rem} a{color:#1F5FD0}
 </style>
 <h1>Accessibility Audit Dashboard</h1>
 <p class="sub">Generated ${date} · ${rows.length} page${rows.length > 1 ? "s" : ""} audited</p>
 <table>
-<tr><th>Page</th><th>URL</th><th>Date</th><th>axe</th><th>Layout</th><th>Artifacts</th></tr>
+<tr><th>Page</th><th>URL</th><th>Date</th><th>axe</th><th>Layout</th><th>Conformance</th><th>Artifacts</th></tr>
 ${rows.map(r => `<tr>
   <td><strong>${escapeHtml(r.page)}</strong>${showHost ? `<div class="host">${escapeHtml(r.host)}</div>` : ""}</td>
   <td><a href="${escapeHtml(r.url)}">${escapeHtml(r.url)}</a></td>
   <td>${escapeHtml(r.date)}</td>
   <td>${chip(r.viol, "violations")}</td>
   <td>${chip(r.layoutIssues, "issues")}</td>
+  <td>${conf(r)}</td>
   <td>${links(r)}</td>
 </tr>`).join("\n")}
 </table></html>`;

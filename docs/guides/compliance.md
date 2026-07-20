@@ -21,6 +21,10 @@ node bin/auria.mjs https://example.com/page --vpat --out audits
 The **`.json`** form carries the same result as structured data:
 `{ format, standard, product, summary: { supports, partiallySupports, … }, criteria: [{ sc, name, level, conformance, remarks }] }` — feed it to a dashboard or diff it over time.
 
+The **dashboard** reads it automatically: when a page has a `-vpat.json`, the generated
+`index.html` gains a **Conformance** column (criteria failing + a note of how many remain
+Not Evaluated) and a `vpat` link to the report — so a whole-site scan shows compliance at a glance.
+
 In a container: `docker run … --vpat`.
 
 ### Whole-site (product-level) report

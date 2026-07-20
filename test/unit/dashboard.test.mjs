@@ -7,8 +7,9 @@ import os from "node:os";
 import { collectRows, renderDashboard, writeDashboards } from "../../src/dashboard.mjs";
 
 const rows = [
-  { host: "example.com", page: "pay", date: "2026-07-19", url: "https://example.com/pay", viol: 3, layoutIssues: 0, artifacts: ["pay-report.pdf"] },
-  { host: "example.com", page: "home", date: "2026-07-19", url: "https://example.com/", viol: 0, layoutIssues: 2, artifacts: [] },
+  { host: "example.com", page: "pay", date: "2026-07-19", url: "https://example.com/pay", viol: 3, layoutIssues: 0,
+    vpat: { supports: 9, partiallySupports: 4, doesNotSupport: 1, notEvaluated: 41 }, artifacts: ["pay-report.pdf", "pay-vpat.pdf"] },
+  { host: "example.com", page: "home", date: "2026-07-19", url: "https://example.com/", viol: 0, layoutIssues: 2, vpat: null, artifacts: [] },
 ];
 
 test("renderDashboard: chips reflect counts, links + host shown, date injected", () => {
@@ -18,8 +19,13 @@ test("renderDashboard: chips reflect counts, links + host shown, date injected",
   assert.ok(html.includes('<span class="chip ok">0 issues</span>'));        // pay has no layout issues
   assert.ok(html.includes('<span class="chip bad">2 issues</span>'));       // home has layout issues
   assert.ok(html.includes('<a href="pay/pay-report.pdf">pdf</a>'));         // artifact link + label
+  assert.ok(html.includes('<a href="pay/pay-vpat.pdf">vpat</a>'));          // vpat link disambiguated from report pdf
   assert.ok(html.includes('<div class="host">example.com</div>'));          // showHost subtitle
   assert.ok(html.includes(">—<"), "a page with no artifacts shows a dash");
+  // Conformance column: failing = partial (4) + does-not-support (1) = 5; muted line notes not-evaluated
+  assert.ok(html.includes('<span class="chip bad">5 failing</span>'));
+  assert.ok(html.includes('<div class="muted">41 not evaluated</div>'));
+  assert.equal((html.match(/<th>Conformance<\/th>/g) || []).length, 1);
 });
 
 test("renderDashboard: escapes html in fields", () => {
@@ -40,12 +46,17 @@ test("collectRows + writeDashboards: scans an output tree and writes indexes", a
     layout: { Phone: { overflowPx: 2000, smallTargets: [{}], tinyText: [] } },
   }));
   await writeFile(path.join(dir, "pay-report.pdf"), "%PDF-stub");
+  await writeFile(path.join(dir, "pay-vpat.json"), JSON.stringify({
+    format: "VPAT-2", summary: { supports: 9, partiallySupports: 4, doesNotSupport: 1, notEvaluated: 41, total: 55 },
+  }));
+  await writeFile(path.join(dir, "pay-vpat.pdf"), "%PDF-vpat-stub");
   try {
     const rowsFound = await collectRows(base);
     assert.equal(rowsFound.length, 1);
     assert.equal(rowsFound[0].viol, 1);           // one axe violation
     assert.equal(rowsFound[0].layoutIssues, 2);   // overflow (1) + one small target (1)
-    assert.deepEqual(rowsFound[0].artifacts, ["pay-report.pdf"]);
+    assert.deepEqual(rowsFound[0].vpat, { supports: 9, partiallySupports: 4, doesNotSupport: 1, notEvaluated: 41, total: 55 });
+    assert.deepEqual(rowsFound[0].artifacts, ["pay-report.pdf", "pay-vpat.pdf"]);
 
     const written = await writeDashboards(base);
     assert.equal(written.length, 2);              // global + one per-host
