@@ -12,13 +12,20 @@
 // Pure function: no browser, no file writes (caller decides whether to persist .md).
 
 // Describe a config setup step for the "setup steps applied first" list.
+// SECURITY: `fill`/`select` values are the login/PII channel (e.g. a password typed
+// into #password), so they are REDACTED by default — the same hard invariant that
+// keeps cookies/headers out of reports. Opt a specific step back in with
+// `sensitive: false` when the value is genuinely non-secret and useful to show.
+const stepValue = s => s.sensitive === false ? `"${s.value ?? ""}"` : "(value redacted)";
 const describeStep = s =>
   s.click ? `Click \`${s.click}\`` :
-  s.fill ? `Fill \`${s.fill}\` with "${s.value ?? ""}"` :
-  s.select ? `Select "${s.value ?? ""}" in \`${s.select}\`` :
+  s.fill ? `Fill \`${s.fill}\` with ${stepValue(s)}` :
+  s.select ? `Select ${stepValue(s)} in \`${s.select}\`` :
   s.focus ? `Focus \`${s.focus}\`` :
   s.press ? `Press ${s.press}` :
-  s.wait ? `Wait ${s.wait}ms` : JSON.stringify(s);
+  s.wait ? `Wait ${s.wait}ms` :
+  // Never fall through to JSON.stringify(s) — it would dump a raw `value`.
+  "Setup step";
 
 export function buildMarkdown(analysis, {
   job, plan, viewports, host, diff = null, emu = {},

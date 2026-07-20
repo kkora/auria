@@ -80,9 +80,25 @@ test("buildMarkdown: SECURITY — auth values never appear, only counts", () => 
   assert.ok(!md.includes("SECRET-HEADER"), "header value must not leak into the report");
 });
 
-test("buildMarkdown: setup steps listed when present", () => {
-  const md = buildMarkdown(analysis, ctx({ job: { steps: [{ click: "#pay" }, { fill: "#amount", value: "0" }] } }));
+test("buildMarkdown: setup steps listed, click shown", () => {
+  const md = buildMarkdown(analysis, ctx({ job: { steps: [{ click: "#pay" }, { press: "Enter" }] } }));
   assert.ok(md.includes("**Setup steps applied first:**"));
   assert.ok(md.includes("Click `#pay`"));
+  assert.ok(md.includes("Press Enter"));
+});
+
+test("buildMarkdown: SECURITY — setup-step fill/select values are redacted by default", () => {
+  const md = buildMarkdown(analysis, ctx({ job: { steps: [
+    { fill: "#password", value: "hunter2-SECRET" },
+    { select: "#plan", value: "GOLD-PII" },
+  ] } }));
+  assert.ok(!md.includes("hunter2-SECRET"), "a filled password must never appear in the report");
+  assert.ok(!md.includes("GOLD-PII"), "a selected value must not appear by default");
+  assert.ok(md.includes("Fill `#password` with (value redacted)"));
+  assert.ok(md.includes("Select (value redacted) in `#plan`"));
+});
+
+test("buildMarkdown: a step marked sensitive:false may show its value", () => {
+  const md = buildMarkdown(analysis, ctx({ job: { steps: [{ fill: "#amount", value: "0", sensitive: false }] } }));
   assert.ok(md.includes('Fill `#amount` with "0"'));
 });
