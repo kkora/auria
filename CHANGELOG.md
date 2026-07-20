@@ -5,8 +5,13 @@ All notable changes to Auria are documented here. Format loosely follows
 
 ## [Unreleased]
 
-The full P1 CLI is now ported from the original monolith. Every `src/` module is
-implemented; the analysis-only pipeline and the narrated video both run end-to-end.
+_Nothing yet._
+
+## [0.1.0] - 2026-07-20
+
+First release. The full P1 CLI is ported from the original monolith — every `src/`
+module is implemented — and it runs headless in a Linux container (P2), narrated video
+and all.
 
 ### Added
 - **Config & CLI** (`src/config.mjs`, `bin/auria.mjs`): `parseCli` / `parseConfigFile`
@@ -33,12 +38,28 @@ implemented; the analysis-only pipeline and the narrated video both run end-to-e
   flags).
 - **Real NVDA mode** (`src/nvda.mjs`, `--nvda`): captures real spoken phrases into the
   keyboard walk and re-voices them in the video; clear guidance when NVDA is absent.
-- Tests: 65 unit + 15 integration (browser suites self-skip without Edge/Chrome).
+- **Container (P2)** — a `Dockerfile` (Node 22 + Chromium + espeak-ng + ffmpeg-static)
+  that runs the whole pipeline, including the narrated video, headless on Linux; a
+  `container` CI job proves it every push and uploads the output as an artifact.
+- **Deployment** — a GHCR `publish.yml` workflow (versioned + `latest` image on tags;
+  third-party actions pinned to commit SHAs) and `docs/guides/deployment.md`
+  (VM / Cloud Run / ECS / k8s recipes).
+- **CI** — Linux (unit + integration) + Windows (unit) + container jobs on Node 22;
+  ESLint flat config + lint gate.
+- Tests: 72 unit + 22 integration (browser suites self-skip without a browser).
 
 ### Changed
 - Rebranded the SARIF driver name and JUnit testsuite prefix to `auria`.
+- Calmer default cross-platform (espeak) narration pace (~150 WPM).
+
+### Fixed
+- Redact setup-step `fill`/`select` values in reports (credential/PII channel).
+- Per-page `out` override; query-string-safe output folders (no silent clobbering).
+- Keyboard-trap false positives on pages with no focusable elements.
+- NVDA preflight before browser launch (clear guidance even headless); `recordVideo`
+  cleans up intermediates on failure; guard a missing-ffmpeg error.
 
 ### Notes
-- Verified end-to-end on Windows: analysis + all report formats, `--crawl`, System.Speech
-  video, and neural Piper video. Not yet exercised here: espeak-ng video (Linux) and the
-  NVDA-installed capture path.
+- Verified end-to-end: analysis + all report formats, `--crawl`, System.Speech + neural
+  Piper video (Windows), and the full narrated-video audit inside a Linux container.
+  The NVDA-installed capture path is ported but requires NVDA to exercise.
