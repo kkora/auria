@@ -41,6 +41,12 @@ test("runAudit: analysis-only run emits axe.json, md, pdf, sarif, junit", opts, 
     assert.equal(vjson.format, "VPAT-2");
     assert.equal(vjson.criteria.length, 55);
     assert.equal(vjson.criteria.find(c => c.sc === "1.1.1").conformance, "Partially Supports");
+    // trend: first run writes a trend report (no prior) and seeds the history file
+    const trend = await readFile(path.join(dir, "broken-vpat-trend.md"), "utf8");
+    assert.match(trend, /First VPAT run/);
+    const hist = JSON.parse(await readFile(path.join(dir, "broken-vpat-history.json"), "utf8"));
+    assert.equal(hist.length, 1);
+    assert.equal(hist[0].summary.total, 55);
   } finally {
     await rm(out, { recursive: true, force: true });
   }
@@ -51,6 +57,23 @@ test("runAudit: fail-on breaches when violations exist on the broken fixture", o
   try {
     const r = await runAudit({ url: FIXTURE, out, name: "broken", video: false, pdf: false, failOn: "minor" });
     assert.equal(r.failOnBreached, true, "any violation is >= minor -> breach");
+  } finally {
+    await rm(out, { recursive: true, force: true });
+  }
+});
+
+test("runAudit: a second --vpat run accrues history and diffs against the previous", opts, async () => {
+  const out = path.join(os.tmpdir(), `auria-e2e-trend-${process.pid}`);
+  const dir = path.join(out, "site", "broken");
+  try {
+    await runAudit({ url: FIXTURE, out, name: "broken", video: false, pdf: false, vpat: true });
+    await runAudit({ url: FIXTURE, out, name: "broken", video: false, pdf: false, vpat: true });
+    // Two runs -> two history points; same fixture -> no conformance change reported.
+    const hist = JSON.parse(await readFile(path.join(dir, "broken-vpat-history.json"), "utf8"));
+    assert.equal(hist.length, 2);
+    const trend = await readFile(path.join(dir, "broken-vpat-trend.md"), "utf8");
+    assert.match(trend, /Comparing against the previous run/);
+    assert.match(trend, /No conformance changes since the previous run/);
   } finally {
     await rm(out, { recursive: true, force: true });
   }

@@ -22,6 +22,7 @@ import { renderPdf } from "./report/pdf.mjs";
 import { buildSarif } from "./report/sarif.mjs";
 import { buildJunit } from "./report/junit.mjs";
 import { buildVpat, buildVpatData, buildSiteVpat, buildSiteVpatData } from "./report/vpat.mjs";
+import { diffVpat, renderTrendMd, pushHistory } from "./report/trend.mjs";
 import { captureScreenshots } from "./report/screenshots.mjs";
 import { writeDashboards } from "./dashboard.mjs";
 import { recordVideo } from "./record.mjs";
@@ -152,9 +153,25 @@ export async function runAudit(job) {
       const vpatMeta = typeof job.vpat === "object" ? job.vpat : {};
       const vctx = { url: job.url, title: analysis.title, date: analysis.date, product: job.name, ...vpatMeta };
       const vpatMd = buildVpat(analysis, vctx);
+      const vpatData = buildVpatData(analysis, vctx);
+      const jsonPath = path.join(outDir, `${name}-vpat.json`);
+      // Trend: read the previous run's VPAT (before we overwrite it) so we can diff conformance.
+      let prevVpat = null;
+      try { prevVpat = JSON.parse(await readFile(jsonPath, "utf8")); } catch { /* first run — no prior */ }
       await writeFile(path.join(outDir, `${name}-vpat.md`), vpatMd);
-      await writeFile(path.join(outDir, `${name}-vpat.json`), JSON.stringify(buildVpatData(analysis, vctx), null, 2));
+      await writeFile(jsonPath, JSON.stringify(vpatData, null, 2));
       if (wantPdf) await renderPdf(browser, vpatMd, path.join(outDir, `${name}-vpat.pdf`));
+      // Conformance trend + rolling history (compliance over time).
+      const diff = diffVpat(prevVpat, vpatData);
+      await writeFile(path.join(outDir, `${name}-vpat-trend.md`),
+        renderTrendMd(diff, { name: vpatData.product || name, date: vpatData.date, prevDate: prevVpat?.date }));
+      const histPath = path.join(outDir, `${name}-vpat-history.json`);
+      let history = null;
+      try { history = JSON.parse(await readFile(histPath, "utf8")); } catch { /* none yet */ }
+      await writeFile(histPath, JSON.stringify(
+        pushHistory(history, { date: vpatData.date, url: vpatData.url, summary: vpatData.summary }), null, 2));
+      if (diff.hasPrev && diff.changed)
+        console.log(`  VPAT trend: ${diff.regressed.length} regressed, ${diff.fixed.length} fixed since ${prevVpat.date || "last run"}`);
     }
 
     const totalV = Object.values(analysis.axe).reduce((n, v) => n + v.length, 0);
@@ -201,8 +218,21 @@ export async function runJobs(jobs) {
     try {
       const analyses = rs.map(r => r.analysis);
       const md = buildSiteVpat(analyses, { product: host, date: rs[0].analysis.date });
+      const siteData = buildSiteVpatData(analyses, { product: host, date: rs[0].analysis.date });
+      const siteJson = path.join(base, `${host}-vpat.json`);
+      let prevSite = null;
+      try { prevSite = JSON.parse(await readFile(siteJson, "utf8")); } catch { /* first site run */ }
       await writeFile(path.join(base, `${host}-vpat.md`), md);
-      await writeFile(path.join(base, `${host}-vpat.json`), JSON.stringify(buildSiteVpatData(analyses, { product: host, date: rs[0].analysis.date }), null, 2));
+      await writeFile(siteJson, JSON.stringify(siteData, null, 2));
+      // Product-level conformance trend + history.
+      const diff = diffVpat(prevSite, siteData);
+      await writeFile(path.join(base, `${host}-vpat-trend.md`),
+        renderTrendMd(diff, { name: host, date: siteData.date, prevDate: prevSite?.date }));
+      const siteHist = path.join(base, `${host}-vpat-history.json`);
+      let history = null;
+      try { history = JSON.parse(await readFile(siteHist, "utf8")); } catch { /* none yet */ }
+      await writeFile(siteHist, JSON.stringify(
+        pushHistory(history, { date: siteData.date, url: siteData.url, pages: siteData.pages, summary: siteData.summary }), null, 2));
       if (rs.some(r => r.pdf)) {
         const browser = await launchBrowser();
         try { await renderPdf(browser, md, path.join(base, `${host}-vpat.pdf`)); }

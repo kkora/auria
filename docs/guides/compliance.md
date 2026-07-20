@@ -68,6 +68,22 @@ node bin/auria.mjs --config vpat.json
 - **Table 2 — Revised Section 508 Report.** Chapter 3 (Functional Performance Criteria) and Chapter 6 (Support Documentation) are listed as **Not Evaluated** (they need AT-based manual testing); Chapter 4 (Hardware) is N/A for web; Chapter 5 (Software) is met via Table 1.
 - **Table 3 — EN 301 549 Report.** Chapter 9 (Web) maps to the WCAG table; other chapters need manual review.
 
+## Track conformance over time
+
+Every `--vpat` run also writes a **trend**, so you can see whether a page is getting more
+or less conformant between audits:
+
+- **`<name>-vpat-trend.md`** — diffs this run against the previous one: a summary delta
+  (Supports +1, Does Not Support −2, …) and tables of **⚠️ Regressions** (a criterion that
+  got worse) and **✅ Fixes** (one that improved). Moves to/from *Not Evaluated* are listed
+  as coverage changes, not regressions.
+- **`<name>-vpat-history.json`** — a rolling log of `{ date, url, summary }` points (capped
+  at the 100 most recent) you can chart or diff in CI. The whole-site report gets the same
+  pair at `<host>-vpat-trend.md` / `<host>-vpat-history.json`.
+
+The trend rides on `--vpat` automatically — no extra flag. On the first run it simply notes
+there's no prior report to compare against.
+
 ## How to finish it
 
 1. Run the audit with `--vpat` (and `--crawl` for a whole site).
