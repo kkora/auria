@@ -15,8 +15,16 @@ test("slugify: collapses non-alphanumerics to single dashes", () => {
   assert.equal(slugify("/pay/step 2"), "pay-step-2");
 });
 
-test("slugFromUrl: slugifies the pathname only", () => {
-  assert.equal(slugFromUrl("https://x.gov/forms/apply?ref=nav"), "forms-apply");
+test("slugFromUrl: no query -> pathname slug", () => {
+  assert.equal(slugFromUrl("https://x.gov/forms/apply"), "forms-apply");
+});
+
+test("slugFromUrl: query string disambiguates so pages don't collide", () => {
+  const a = slugFromUrl("https://x.gov/list?id=1");
+  const b = slugFromUrl("https://x.gov/list?id=2");
+  assert.notEqual(a, b, "different queries must map to different folders");
+  assert.equal(a, slugFromUrl("https://x.gov/list?id=1"), "same URL is stable (for baselines)");
+  assert.match(a, /^list-[0-9a-f]{8}$/);
 });
 
 import { normalizeAuth } from "../../src/config.mjs";
@@ -61,6 +69,14 @@ test("parseConfigFile: per-page value overrides config default", () => {
   });
   assert.equal(jobs[0].tabs, 14); // per-page wins
   assert.equal(jobs[1].tabs, 10); // falls back to config
+});
+
+test("parseConfigFile: out honors per-page override, then top-level config", () => {
+  const { jobs } = parseConfigFile({
+    out: "top", pages: [{ url: "https://x.gov/a", out: "per-page" }, { url: "https://x.gov/b" }],
+  });
+  assert.equal(jobs[0].out, "per-page"); // per-page wins
+  assert.equal(jobs[1].out, "top");      // falls back to config
 });
 
 test("parseConfigFile: passes crawl through, defaults to null", () => {

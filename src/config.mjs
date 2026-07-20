@@ -3,6 +3,7 @@
 // Pure module: no browser, no process.exit, no file writes. Config-file *reading*
 // is the caller's job (see parseCli's returned configPath). Resolution order for
 // every property is ALWAYS: per-page value -> top-level config -> built-in default.
+import { createHash } from "node:crypto";
 
 // Tagged error for bad invocations. bin/ prints the message + usage and exits 1;
 // any untagged throw is an unexpected bug.
@@ -15,7 +16,15 @@ export function usageError(message) {
 export const slugify = s => s.replace(/^\/+|\/+$/g, "")
   .replace(/\.[a-z0-9]+$/i, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "home";
 
-export const slugFromUrl = u => slugify(new URL(u).pathname);
+// Output folder name for a URL. Two URLs that differ only by query string (pagination,
+// filters, tabs — exactly what a crawler finds) must NOT map to the same folder, or the
+// second run silently clobbers the first's artifacts. Fold a short deterministic hash of
+// the query into the name so they stay distinct (and stable across runs, for baselines).
+export const slugFromUrl = u => {
+  const url = new URL(u);
+  const base = slugify(url.pathname);
+  return url.search ? `${base}-${createHash("sha1").update(url.search).digest("hex").slice(0, 8)}` : base;
+};
 
 // Auth: cookies as "n=v; n2=v2" or [{name, value, domain?, path?}]; headers as {Name: value}.
 // Values are used only to drive the browser and never appear in reports (counts only).
@@ -63,7 +72,7 @@ export function parseConfigFile(cfg) {
       sarif: p.sarif ?? cfg.sarif,
       junit: p.junit ?? cfg.junit,
       nvda: p.nvda ?? cfg.nvda,
-      out: cfg.out,
+      out: p.out ?? cfg.out,
     });
   }
   return { jobs, crawl: cfg.crawl || null };

@@ -16,7 +16,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { normalizeAuth, slugify } from "./config.mjs";
+import { normalizeAuth, slugify, slugFromUrl } from "./config.mjs";
 import { launchBrowser } from "./browser.mjs";
 
 const SKIP_EXT = /\.(pdf|zip|png|jpe?g|svg|webm|mp4|docx?|xlsx?)$/i;
@@ -108,12 +108,13 @@ export async function expandCrawl(seed, crawl) {
     pages, failed,
     jobs: pages.map(p => {
       const parsed = new URL(p.url);
-      let src = parsed.pathname;
+      // file:// seeds get short cwd-relative names; http(s) use slugFromUrl so pages
+      // differing only by query string don't collide into one output folder.
       if (parsed.protocol === "file:") {
         const rel = path.relative(process.cwd(), fileURLToPath(parsed)).replace(/\\/g, "/");
-        if (rel && !rel.startsWith("..")) src = rel;
+        return { ...seed, url: p.url, name: slugify(rel && !rel.startsWith("..") ? rel : parsed.pathname) };
       }
-      return { ...seed, url: p.url, name: slugify(src) };
+      return { ...seed, url: p.url, name: slugFromUrl(p.url) };
     }),
   };
 }
