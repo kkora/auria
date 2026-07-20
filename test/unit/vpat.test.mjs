@@ -1,7 +1,8 @@
 // Unit tests for the VPAT/ACR generator — pure function of the analysis object.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildVpat, buildSiteVpat, buildVpatData, buildSiteVpatData } from "../../src/report/vpat.mjs";
+import axe from "axe-core";
+import { buildVpat, buildSiteVpat, buildVpatData, buildSiteVpatData, scFromTag, WCAG_SC } from "../../src/report/vpat.mjs";
 
 const analysis = {
   url: "https://x.gov/pay",
@@ -21,6 +22,45 @@ const analysis = {
   keyboardTrap: { status: "pass", stops: 3 },
   layout: { Desktop: { overflowPx: 0, smallTargets: [], tinyText: [] }, Phone: { overflowPx: 2000, smallTargets: [{ el: "button" }], tinyText: [] } },
 };
+
+test("scFromTag: parses axe SC tags, including two-digit criteria; rejects non-SC tags", () => {
+  assert.equal(scFromTag("wcag111"), "1.1.1");
+  assert.equal(scFromTag("wcag143"), "1.4.3");
+  assert.equal(scFromTag("wcag258"), "2.5.8");
+  assert.equal(scFromTag("wcag1410"), "1.4.10");  // two-digit criterion
+  assert.equal(scFromTag("wcag2411"), "2.4.11");  // two-digit criterion
+  assert.equal(scFromTag("wcag412"), "4.1.2");
+  // level / standard / best-practice tags are not success criteria
+  for (const t of ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa", "best-practice", "cat.keyboard", "section508", "ACT", ""])
+    assert.equal(scFromTag(t), null, `${t} is not an SC`);
+});
+
+test("WCAG_SC: the reported set is exactly the 55 A/AA criteria", () => {
+  assert.equal(WCAG_SC.size, 55);
+  assert.ok(WCAG_SC.has("1.1.1") && WCAG_SC.has("4.1.3"));
+  assert.ok(!WCAG_SC.has("4.1.1"), "4.1.1 Parsing is obsolete in WCAG 2.2");
+  assert.ok(!WCAG_SC.has("1.4.6"), "1.4.6 is Level AAA, out of scope");
+});
+
+// Expert-review-as-a-test: guards the axe-rule -> SC mapping against axe-core drift. If a
+// future axe-core bump adds an A/AA rule for a success criterion we don't list, this fails
+// (a silent gap in the VPAT). AAA criteria that A-level rules also tag are the only allowed
+// escapes (currently just 2.1.3, carried by scrollable-region-focusable alongside 2.1.1).
+test("axe coverage: every A/AA axe rule maps to a reported SC (no silent gaps)", () => {
+  const AA_LEVEL = new Set(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"]);
+  // AAA criteria that dual-level A/AA rules also tag — intentionally out of an A/AA report.
+  const ALLOWED_AAA = new Set(["2.1.3"]);
+  const gaps = [];
+  for (const rule of axe.getRules()) {
+    const tags = rule.tags || [];
+    if (!tags.some(t => AA_LEVEL.has(t))) continue;   // only rules axe classifies as A/AA
+    for (const t of tags) {
+      const sc = scFromTag(t);
+      if (sc && !WCAG_SC.has(sc) && !ALLOWED_AAA.has(sc)) gaps.push(`${rule.ruleId} -> ${sc} (${t})`);
+    }
+  }
+  assert.deepEqual(gaps, [], `axe A/AA rules mapping to SCs absent from the VPAT: ${gaps.join(", ")}`);
+});
 
 test("buildVpat: header, standard, and draft disclaimer", () => {
   const md = buildVpat(analysis, { url: analysis.url });

@@ -68,6 +68,20 @@ const WCAG = [
   ["4.1.3", "Status Messages", "AA"],
 ];
 
+// The A/AA criteria we score. axe also tags rules for Level AAA (e.g. 1.4.6, 2.1.3) and
+// the obsolete 4.1.1 Parsing (removed in WCAG 2.2); those are out of scope for this report
+// and are dropped deliberately in collectFindings — see the axe-coverage test that guards it.
+export const WCAG_SC = new Set(WCAG.map(([sc]) => sc));
+
+// Parse an axe rule tag to its WCAG success criterion. axe encodes an SC as
+// "wcag<principle><guideline><criterion>" — single-digit principle + guideline, then the
+// criterion (which may be two digits): "wcag143" -> "1.4.3", "wcag258" -> "2.5.8",
+// "wcag1410" -> "1.4.10". Level/standard tags ("wcag2aa", "best-practice") -> null.
+export function scFromTag(tag) {
+  const m = /^wcag(\d)(\d)(\d+)$/.exec(tag);
+  return m ? `${m[1]}.${m[2]}.${m[3]}` : null;
+}
+
 // Criteria Auria evaluates directly — clean = "Supports", failing = "Partially Supports"
 // (or "Does Not Support" for the hard failures handled below).
 const AURIA_EVALUATES = new Set(["1.3.1", "1.4.4", "1.4.10", "2.1.2", "2.4.2", "2.4.3", "2.4.6", "2.5.8", "4.1.2"]);
@@ -116,9 +130,9 @@ function collectFindings(analysis) {
     for (const v of list) {
       if (v.id === "scan-failed") continue;
       for (const tag of v.wcag || []) {
-        const m = /^wcag(\d)(\d)(\d+)$/.exec(tag);
-        if (!m) continue;
-        const sc = `${m[1]}.${m[2]}.${m[3]}`;
+        const sc = scFromTag(tag);
+        // Only A/AA criteria we actually report; skip AAA + obsolete 4.1.1 and non-SC tags.
+        if (!sc || !WCAG_SC.has(sc)) continue;
         const key = `${sc}|${v.id}`;
         if (seen.has(key)) continue;
         seen.add(key);
