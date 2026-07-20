@@ -4,13 +4,17 @@
 // No browser download. This is the production launcher; the test helper is separate.
 import { chromium } from "playwright-core";
 
-// Launch the installed Edge (preferred) or Chrome. Throws if neither is available.
+// Launch the installed Edge (preferred) or Chrome, falling back to Playwright's
+// bundled Chromium (e.g. CI or a machine without Edge/Chrome, once
+// `npx playwright install chromium` has run). Throws with the real cause if none work.
 // `headless` defaults to Playwright's default; pass false for headed (e.g. NVDA).
 export async function launchBrowser({ headless } = {}) {
+  let lastErr;
   for (const channel of ["msedge", "chrome"]) {
-    try { return await chromium.launch({ channel, headless }); } catch {}
+    try { return await chromium.launch({ channel, headless }); } catch (e) { lastErr = e; }
   }
-  throw new Error("Neither Edge nor Chrome is available.");
+  try { return await chromium.launch({ headless }); } catch (e) { lastErr = e; }
+  throw new Error(`Could not launch a browser (tried Edge, Chrome, bundled Chromium): ${lastErr?.message || "unknown error"}`);
 }
 
 // Apply config setup steps to put the page into the state to audit. One action key per

@@ -13,9 +13,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm ci
-      # Playwright drives an installed browser; install Chromium for CI.
+      # Integration suites launch Edge/Chrome, then fall back to bundled Chromium —
+      # install it so the browser tests actually run (not silently self-skip) in CI.
       - run: npx playwright install --with-deps chromium
       - run: npm run test:unit
       - run: npm run test:integration
@@ -27,7 +28,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm ci
       - run: npm run test:unit
       # TODO: add a Windows-TTS smoke test and the --nvda availability-probe test

@@ -4,7 +4,7 @@ Install Auria and run your first accessibility audit.
 
 ## Prerequisites
 
-- **Node.js ≥ 20** — check with `node --version`.
+- **Node.js ≥ 22** — check with `node --version`.
 - **Edge or Chrome installed.** Auria drives your installed browser via
   `playwright-core` (it tries `msedge`, then `chrome`); it does **not** download one.
 - **Windows** if you want the default narrated video or `--nvda`. The audit and
