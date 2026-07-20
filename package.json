@@ -1,6 +1,6 @@
 {
   "name": "auria",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Accessibility + responsive-layout auditor: URL in -> narrated video, axe/layout/keyboard reports (MD/PDF/JSON/SARIF/JUnit), and dashboards out.",
   "type": "module",
   "bin": {
