@@ -124,6 +124,12 @@ test("parseCli: --no-video / --md booleans", () => {
   assert.equal(jobs[0].md, true);
 });
 
+test("parseCli: --vpat and --fail-on-regression are surfaced as booleans", () => {
+  const { jobs } = parseCli(["https://x.gov/", "--vpat", "--fail-on-regression"]);
+  assert.equal(jobs[0].vpat, true);
+  assert.equal(jobs[0].failOnRegression, true);
+});
+
 test("parseCli: repeated cookies join and header splits on first colon", () => {
   const { jobs } = parseCli([
     "https://x.gov/", "--cookie", "a=1", "--cookie", "b=2", "--header", "Authorization: Bearer z",

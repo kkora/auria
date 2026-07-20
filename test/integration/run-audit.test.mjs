@@ -2,7 +2,7 @@
 // analysis-only artifacts. Self-skips when no Edge/Chrome is available.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { access, rm, readFile } from "node:fs/promises";
+import { access, rm, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { launchBrowser } from "../helpers/browser.mjs";
@@ -74,6 +74,31 @@ test("runAudit: a second --vpat run accrues history and diffs against the previo
     const trend = await readFile(path.join(dir, "broken-vpat-trend.md"), "utf8");
     assert.match(trend, /Comparing against the previous run/);
     assert.match(trend, /No conformance changes since the previous run/);
+  } finally {
+    await rm(out, { recursive: true, force: true });
+  }
+});
+
+test("runJobs: --fail-on-regression implies --vpat, passes on first run, exits 2 on a drop", opts, async () => {
+  const out = path.join(os.tmpdir(), `auria-e2e-regress-${process.pid}`);
+  const dir = path.join(out, "site", "broken");
+  const job = { url: FIXTURE, out, name: "broken", video: false, pdf: false, failOnRegression: true };
+  try {
+    // First run: no prior VPAT to regress against -> exit 0. It also proves the flag implies
+    // --vpat (the report is written even though `vpat` was never set).
+    assert.equal(await runJobs([job]), 0);
+    assert.ok(await exists(path.join(dir, "broken-vpat.json")), "--fail-on-regression wrote a VPAT");
+    // Replace the baseline with a rosier one (1.1.1 marked Supports); the broken fixture's
+    // missing <img> alt resolves to Partially Supports on the next run -> a regression.
+    await writeFile(path.join(dir, "broken-vpat.json"), JSON.stringify({
+      format: "VPAT-2", date: "2026-07-01",
+      summary: { supports: 1, partiallySupports: 0, doesNotSupport: 0, notEvaluated: 54, total: 55 },
+      criteria: [{ sc: "1.1.1", name: "Non-text Content", level: "A", conformance: "Supports", remarks: "" }],
+    }));
+    assert.equal(await runJobs([job]), 2, "a conformance drop trips the gate");
+    const trend = await readFile(path.join(dir, "broken-vpat-trend.md"), "utf8");
+    assert.match(trend, /Regressions \(1\)/);
+    assert.match(trend, /1\.1\.1 Non-text Content \| Supports \| Partially Supports/);
   } finally {
     await rm(out, { recursive: true, force: true });
   }

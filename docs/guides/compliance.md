@@ -84,6 +84,20 @@ or less conformant between audits:
 The trend rides on `--vpat` automatically — no extra flag. On the first run it simply notes
 there's no prior report to compare against.
 
+### Gate CI on regressions
+
+Add **`--fail-on-regression`** to make a conformance drop fail the build (exit code **2**),
+the same way `--fail-on` gates on new violations:
+
+```bash
+node bin/auria.mjs https://example.com/page --fail-on-regression --out audits
+```
+
+It implies `--vpat`, compares this run against the stored `<name>-vpat.json`, and exits
+non-zero if any criterion moved to a less-conformant level (Supports → Partially, Partially →
+Does Not Support, …). The first run has nothing to compare against, so it always passes. Commit
+the `-vpat.json` (or persist your `--out` dir between CI runs) so the next run has a baseline.
+
 ## How to finish it
 
 1. Run the audit with `--vpat` (and `--crawl` for a whole site).

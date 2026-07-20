@@ -60,6 +60,9 @@ export async function runAudit(job) {
   const outDir = path.resolve(job.out || "a11y-audits", host, name);
   await mkdir(outDir, { recursive: true });
 
+  // --fail-on-regression needs a VPAT to diff against, so it implies --vpat.
+  const wantVpat = !!job.vpat || !!job.failOnRegression;
+
   let nvdaDriver = null;
   let browser = null;
   try {
@@ -93,7 +96,7 @@ export async function runAudit(job) {
       analysis.headings = await readHeadings(page);
       // Collect axe's passed criteria too when a VPAT is requested, so criteria axe
       // tested-and-passed become a confident "Supports" (heavier, hence opt-in).
-      const axeResult = await runAxe(page, viewports, { passes: !!job.vpat });
+      const axeResult = await runAxe(page, viewports, { passes: wantVpat });
       analysis.axe = axeResult.byViewport;
       analysis.axePassedSc = axeResult.passedSc;
       analysis.viewportMeta = await readViewportMeta(page);
@@ -148,7 +151,8 @@ export async function runAudit(job) {
     if (wantPdf) await renderPdf(browser, md, path.join(outDir, `${name}-report.pdf`));
     if (job.sarif) await writeFile(path.join(outDir, `${name}.sarif`), JSON.stringify(buildSarif(analysis, { url: job.url }), null, 2));
     if (job.junit) await writeFile(path.join(outDir, `${name}-junit.xml`), buildJunit(analysis, { url: job.url }));
-    if (job.vpat) {
+    let regressionBreached = false, regressedCount = 0;
+    if (wantVpat) {
       // `vpat` may be `true` (CLI flag) or an object of VPAT metadata from the config.
       const vpatMeta = typeof job.vpat === "object" ? job.vpat : {};
       const vctx = { url: job.url, title: analysis.title, date: analysis.date, product: job.name, ...vpatMeta };
@@ -172,6 +176,9 @@ export async function runAudit(job) {
         pushHistory(history, { date: vpatData.date, url: vpatData.url, summary: vpatData.summary }), null, 2));
       if (diff.hasPrev && diff.changed)
         console.log(`  VPAT trend: ${diff.regressed.length} regressed, ${diff.fixed.length} fixed since ${prevVpat.date || "last run"}`);
+      // --fail-on-regression: a conformance drop vs the previous run trips the CI gate.
+      regressedCount = diff.regressed.length;
+      if (job.failOnRegression && diff.hasPrev && regressedCount > 0) regressionBreached = true;
     }
 
     const totalV = Object.values(analysis.axe).reduce((n, v) => n + v.length, 0);
@@ -185,8 +192,9 @@ export async function runAudit(job) {
     }
     return {
       outDir, outVideo, seconds, violations: totalV, tabStops: analysis.tabStops.length, pdf: wantPdf, failOnBreached, failOn: job.failOn,
+      regressionBreached, regressedCount,
       // Carry the analysis for a product-level (site-wide) VPAT aggregation in runJobs.
-      ...(job.vpat ? { vpat: true, host, base: path.resolve(job.out || "a11y-audits", host), analysis } : {}),
+      ...(wantVpat ? { vpat: true, host, base: path.resolve(job.out || "a11y-audits", host), analysis } : {}),
     };
   } finally {
     if (nvdaDriver) await nvdaDriver.stop().catch(() => {});
@@ -252,9 +260,11 @@ export async function runJobs(jobs) {
 
   const failed = results.filter(r => !r.ok).length;
   const breached = results.filter(r => r.failOnBreached);
+  const regressed = results.filter(r => r.regressionBreached);
   console.log(`\nDONE: ${results.length - failed}/${results.length} page${results.length > 1 ? "s" : ""} audited${failed ? `, ${failed} failed` : ""}.`);
-  if (breached.length) {
+  if (breached.length || regressed.length) {
     breached.forEach(r => console.error(`FAIL-ON BREACH: ${r.url} has violations at/above "${r.failOn}"`));
+    regressed.forEach(r => console.error(`REGRESSION GATE: ${r.url} lost conformance on ${r.regressedCount} criteria vs the previous run`));
     return 2;
   }
   return failed && failed === results.length ? 1 : 0;

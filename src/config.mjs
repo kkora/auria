@@ -68,6 +68,7 @@ export function parseConfigFile(cfg) {
       auth: p.auth ?? cfg.auth,
       baseline: p.baseline ?? cfg.baseline,
       failOn: p.failOn ?? cfg.failOn,
+      failOnRegression: p.failOnRegression ?? cfg.failOnRegression,
       screenshots: p.screenshots ?? cfg.screenshots,
       sarif: p.sarif ?? cfg.sarif,
       junit: p.junit ?? cfg.junit,
@@ -130,6 +131,7 @@ export function parseCli(argv) {
     sarif: args.includes("--sarif") ? true : undefined,
     junit: args.includes("--junit") ? true : undefined,
     vpat: args.includes("--vpat") ? true : undefined,
+    failOnRegression: args.includes("--fail-on-regression") ? true : undefined,
     nvda: args.includes("--nvda") ? true : undefined,
     out: opt("out"),
   }];
