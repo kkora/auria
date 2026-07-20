@@ -1,6 +1,7 @@
-// Browser lifecycle for integration tests only. Drives the installed Edge/Chrome
-// via playwright-core (no download). launchBrowser() returns null when neither is
-// available so suites can self-skip instead of failing on a browserless machine.
+// Browser lifecycle for integration tests only. Drives the installed Edge/Chrome,
+// falling back to Playwright's bundled Chromium (so CI, after `playwright install
+// chromium`, actually runs these suites). Returns null only when nothing launches, so
+// suites self-skip instead of failing on a truly browserless machine.
 import { chromium } from "playwright-core";
 
 export const VIEWPORTS = [
@@ -13,6 +14,7 @@ export async function launchBrowser() {
   for (const channel of ["msedge", "chrome"]) {
     try { return await chromium.launch({ channel }); } catch {}
   }
+  try { return await chromium.launch(); } catch {}   // bundled Chromium (CI)
   return null;
 }
 

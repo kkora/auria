@@ -42,7 +42,7 @@ node bin/auria.mjs --config examples/pages.sample.json
 
 ## Requirements
 
-- Node.js ≥ 20
+- Node.js ≥ 22 (the `node:test` runner's glob patterns need ≥ 21)
 - Edge or Chrome installed (Auria drives your installed browser — no download)
 - Windows for the default narration voice and for real-NVDA mode; the audit and
   reports themselves are cross-platform. See [CLAUDE.md](CLAUDE.md#platform-note).

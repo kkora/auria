@@ -17,7 +17,7 @@ screenshots, and dashboards. Origin: `tools/a11y-video-audit.mjs` in the
 
 ## Prerequisites
 
-- **Node.js ≥ 20** (uses ESM + `node:test`).
+- **Node.js ≥ 22** (uses ESM + `node:test`; the runner's glob patterns need ≥ 21).
 - **Edge or Chrome installed** — the tool drives your installed browser via
   `playwright-core` (channel `msedge`, then `chrome`). No browser download.
 - **Windows** for the default narration (`System.Speech` via `assets/gen-voice.ps1`)
