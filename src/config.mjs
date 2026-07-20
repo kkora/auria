@@ -71,6 +71,7 @@ export function parseConfigFile(cfg) {
       screenshots: p.screenshots ?? cfg.screenshots,
       sarif: p.sarif ?? cfg.sarif,
       junit: p.junit ?? cfg.junit,
+      vpat: p.vpat ?? cfg.vpat,
       nvda: p.nvda ?? cfg.nvda,
       out: p.out ?? cfg.out,
     });
@@ -128,6 +129,7 @@ export function parseCli(argv) {
     screenshots: args.includes("--screenshots") ? true : undefined,
     sarif: args.includes("--sarif") ? true : undefined,
     junit: args.includes("--junit") ? true : undefined,
+    vpat: args.includes("--vpat") ? true : undefined,
     nvda: args.includes("--nvda") ? true : undefined,
     out: opt("out"),
   }];

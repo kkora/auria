@@ -22,7 +22,7 @@ test("runAudit: analysis-only run emits axe.json, md, pdf, sarif, junit", opts, 
   try {
     const r = await runAudit({
       url: FIXTURE, out, name: "broken",
-      video: false, md: true, sarif: true, junit: true,
+      video: false, md: true, sarif: true, junit: true, vpat: true,
     });
     assert.ok(r.violations > 0, "broken fixture has axe violations");
     // file:// has no hostname -> host folder "site"
@@ -31,6 +31,11 @@ test("runAudit: analysis-only run emits axe.json, md, pdf, sarif, junit", opts, 
     for (const f of ["broken-axe.json", "broken-report.md", "broken-report.pdf", "broken.sarif", "broken-junit.xml"]) {
       assert.ok(await exists(path.join(dir, f)), `expected ${f}`);
     }
+    // --vpat wiring: the draft conformance report is written
+    assert.ok(await exists(path.join(dir, "broken-vpat.md")), "expected the VPAT report");
+    const vpat = await readFile(path.join(dir, "broken-vpat.md"), "utf8");
+    assert.match(vpat, /Accessibility Conformance Report/);
+    assert.match(vpat, /1\.1\.1 Non-text Content \| Partially Supports/); // fixture <img> has no alt
   } finally {
     await rm(out, { recursive: true, force: true });
   }

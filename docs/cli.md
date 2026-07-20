@@ -29,6 +29,7 @@ node bin/auria.mjs --config <file.json>
 | `--fail-on minor\|moderate\|serious\|critical` | CI gate (exit 2 on breach) | off |
 | `--screenshots` | Annotated PNG per viewport | off |
 | `--sarif`, `--junit` | Machine-readable results | off |
+| `--vpat` | Draft VPAT®/ACR conformance report (`<page>-vpat.md` + PDF) | off |
 | `--nvda` | Real NVDA screen reader (see [nvda.md](nvda.md)) | off |
 | `--crawl` | Audit every same-origin page (see [crawl.md](crawl.md)) | off |
 | `--max-pages <n>`, `--max-depth <n>` | Crawl bounds | 20, 3 |
@@ -39,7 +40,7 @@ Resolution order for every property: **per-page → top-level config → default
 See [examples/pages.sample.json](../examples/pages.sample.json). Config keys mirror
 the flags (`format`, `pdf`, `video`, `tabs`, `viewports`, `colorScheme`,
 `reducedMotion`, `voice`, `rate`, `auth`, `baseline`, `failOn`, `screenshots`,
-`sarif`, `junit`, `nvda`, `steps`, plus top-level `out` and `crawl`).
+`sarif`, `junit`, `vpat`, `nvda`, `steps`, plus top-level `out` and `crawl`).
 
 `steps` (per page) put the page into a state before auditing — one action key per
 entry (`click` / `fill` / `select` / `focus` / `press`) plus optional `wait`.

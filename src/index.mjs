@@ -21,6 +21,7 @@ import { buildMarkdown } from "./report/markdown.mjs";
 import { renderPdf } from "./report/pdf.mjs";
 import { buildSarif } from "./report/sarif.mjs";
 import { buildJunit } from "./report/junit.mjs";
+import { buildVpat } from "./report/vpat.mjs";
 import { captureScreenshots } from "./report/screenshots.mjs";
 import { writeDashboards } from "./dashboard.mjs";
 import { recordVideo } from "./record.mjs";
@@ -142,6 +143,11 @@ export async function runAudit(job) {
     if (wantPdf) await renderPdf(browser, md, path.join(outDir, `${name}-report.pdf`));
     if (job.sarif) await writeFile(path.join(outDir, `${name}.sarif`), JSON.stringify(buildSarif(analysis, { url: job.url }), null, 2));
     if (job.junit) await writeFile(path.join(outDir, `${name}-junit.xml`), buildJunit(analysis, { url: job.url }));
+    if (job.vpat) {
+      const vpatMd = buildVpat(analysis, { url: job.url, title: analysis.title, date: analysis.date, product: job.name });
+      await writeFile(path.join(outDir, `${name}-vpat.md`), vpatMd);
+      if (wantPdf) await renderPdf(browser, vpatMd, path.join(outDir, `${name}-vpat.pdf`));
+    }
 
     const totalV = Object.values(analysis.axe).reduce((n, v) => n + v.length, 0);
     let failOnBreached = false;
