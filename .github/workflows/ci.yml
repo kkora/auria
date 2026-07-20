@@ -34,3 +34,22 @@ jobs:
       - run: npm run test:unit
       # TODO: add a Windows-TTS smoke test and the --nvda availability-probe test
       #       (the latter self-skips when NVDA/guidepup is not installed).
+
+  # P2: prove the full audit — INCLUDING the narrated video — runs in a headless Linux
+  # container (the SaaS-worker story). espeak-ng narration + ffmpeg-static mux + headless
+  # Chromium recordVideo, all inside the image.
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build -t auria .
+      - name: Full audit incl. narrated video, inside the container
+        run: |
+          mkdir -p out
+          docker run --rm -v "$PWD/out:/out" auria \
+            "file:///app/test/fixtures/broken-page.html" --out /out --name container
+          echo "container output:"; ls -la out/site/container/ || true
+          test -s out/site/container/container.mp4        || { echo "::error::no narrated video produced in the container"; exit 1; }
+          test -s out/site/container/container-report.pdf || { echo "::error::no PDF produced";      exit 1; }
+          test -s out/site/container/container-axe.json   || { echo "::error::no axe.json produced"; exit 1; }
+          echo "P2 proof OK — narrated video + PDF + axe.json produced in a Linux container."
