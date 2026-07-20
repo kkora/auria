@@ -43,6 +43,8 @@ the flags (`format`, `pdf`, `video`, `tabs`, `viewports`, `colorScheme`,
 
 `steps` (per page) put the page into a state before auditing — one action key per
 entry (`click` / `fill` / `select` / `focus` / `press`) plus optional `wait`.
+`fill`/`select` **values are redacted** in reports by default (they're the login/PII
+channel); add `"sensitive": false` to a step to show its value.
 
 ## Environment variables
 
