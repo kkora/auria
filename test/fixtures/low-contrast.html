@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Low Contrast Fixture</title>
+  <style>
+    body { background: #ffffff; }
+    /* ~1.6:1 on white — well below the 4.5:1 normal-text minimum (WCAG 1.4.3) */
+    .faint { color: #bbbbbb; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1 class="faint">Barely-visible heading</h1>
+    <p class="faint">This grey paragraph fails the WCAG 1.4.3 contrast minimum against white.</p>
+  </main>
+</body>
+</html>

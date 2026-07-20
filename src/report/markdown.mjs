@@ -11,6 +11,7 @@
 // Auth values are NEVER included — counts only (hard invariant).
 // Pure function: no browser, no file writes (caller decides whether to persist .md).
 import { landmarkFindings } from "../analyze/landmarks.mjs";
+import { contrastSummary } from "../analyze/axe.mjs";
 
 // Describe a config setup step for the "setup steps applied first" list.
 // SECURITY: `fill`/`select` values are the login/PII channel (e.g. a password typed
@@ -68,6 +69,15 @@ export function buildMarkdown(analysis, {
     if (!list.length) md.push("None. ✅", "");
     else { md.push("| Rule | Impact | WCAG | Elements |", "| --- | --- | --- | --- |");
       list.forEach(v => md.push(`| ${v.id} — ${v.help} | ${v.impact} | ${v.wcag.join(", ") || "best practice"} | ${v.nodes.slice(0, 4).map(n => `\`${n}\``).join("<br>")} |`)); md.push(""); }
+  }
+  const contrast = contrastSummary(analysis.contrast);
+  if (contrast) {
+    md.push("## Color contrast (WCAG 1.4.3)", "",
+      `**${contrast.count}** element${contrast.count === 1 ? "" : "s"} below the minimum contrast ratio — ` +
+      `${contrast.normalText} at the 4.5:1 (normal-text) threshold, ${contrast.largeText} at 3:1 (large/bold). ` +
+      `Worst measured: **${contrast.worstRatio}:1**.`, "",
+      "| Element | Ratio | Required | Foreground | Background |", "| --- | --- | --- | --- | --- |",
+      ...contrast.worst.map(c => `| \`${c.target.replace(/\|/g, "\\|")}\` | ${c.ratio}:1 | ${c.required}:1 | ${c.fg || "—"} | ${c.bg || "—"} |`), "");
   }
   md.push("## Layout / responsive checks", "",
     analysis.viewportMeta

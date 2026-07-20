@@ -15,6 +15,7 @@ what the tool proves automatically and what still needs manual verification.
 | Keyboard-trap detection | 2.1.2 No Keyboard Trap | A | full-page tab cycle; flags stuck focus |
 | Heading structure / missing `h1` | 1.3.1 Info & Relationships, 2.4.6 Headings | A/AA | heading outline extraction |
 | ARIA landmark structure | 2.4.1 Bypass Blocks, 1.3.1 Info & Relationships | A | landmark region map (native + explicit roles), missing/duplicate `main`, unlabeled same-role landmarks |
+| Color-contrast summary | 1.4.3 Contrast (Minimum) | AA | measured ratios from axe's color-contrast rule: worst offenders, normal (4.5:1) vs large/bold (3:1) split |
 | Text under 12px (advisory) | — (readability signal, not a pass/fail SC) | — | computed `font-size` scan |
 | Dark-mode / reduced-motion audit | context for 1.4.3 etc. | AA | `prefers-color-scheme` / `prefers-reduced-motion` emulation |
 | Real NVDA announcements (`--nvda`) | evidence for 4.1.2 / 1.3.1 | A | captured screen-reader speech |

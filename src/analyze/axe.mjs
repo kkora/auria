@@ -34,6 +34,7 @@ export async function runAxe(page, viewports, { passes = false } = {}) {
   const axeSource = await loadAxeSource();
   const byViewport = {};
   const passedSc = new Set();
+  const contrastByTarget = new Map(); // deduped across viewports; keeps the worst ratio seen
   const resultTypes = passes ? ["violations", "passes"] : ["violations"];
   for (const vp of [viewports[0], viewports[viewports.length - 1]]) {
     await page.setViewportSize({ width: vp.w, height: vp.h });
@@ -47,9 +48,37 @@ export async function runAxe(page, viewports, { passes = false } = {}) {
         nodes: v.nodes.map(n => n.target.join(" ")).slice(0, 10),
       }));
       for (const p of res.passes || []) for (const t of p.tags || []) { const sc = scFromTag(t); if (sc) passedSc.add(sc); }
+      // Pull the measured ratios out of the color-contrast rule (axe attaches them to the
+      // check's `data`), so the report can summarize contrast beyond a bare violation count.
+      for (const n of res.violations.find(v => v.id === "color-contrast")?.nodes || []) {
+        const d = [...(n.any || []), ...(n.all || []), ...(n.none || [])].find(c => c.data && c.data.contrastRatio != null)?.data;
+        if (!d) continue;
+        const target = n.target.join(" ");
+        // axe gives contrastRatio as a number but expectedContrastRatio as "4.5:1" — normalize.
+        const row = { target, ratio: d.contrastRatio, required: parseFloat(d.expectedContrastRatio),
+          fg: d.fgColor, bg: d.bgColor, fontSize: d.fontSize, fontWeight: d.fontWeight };
+        const prev = contrastByTarget.get(target);
+        if (!prev || row.ratio < prev.ratio) contrastByTarget.set(target, row); // keep the worst
+      }
     } catch (e) {
       byViewport[vp.label] = [{ id: "scan-failed", impact: "unknown", help: `axe could not run (likely CSP): ${e.message}`, wcag: [], nodes: [] }];
     }
   }
-  return { byViewport, passedSc: [...passedSc] };
+  return { byViewport, passedSc: [...passedSc], contrast: [...contrastByTarget.values()] };
+}
+
+// Pure: summarize the color-contrast rows (WCAG 1.4.3). Returns null when there were no
+// contrast failures, else the count, the worst measured ratio, a normal/large-text split
+// (normal text needs 4.5:1, large or bold text 3:1), and the worst offenders for the report.
+export function contrastSummary(contrast = []) {
+  if (!contrast.length) return null;
+  const sorted = [...contrast].sort((a, b) => a.ratio - b.ratio);
+  const normalText = contrast.filter(c => (c.required || 0) >= 4.5).length;
+  return {
+    count: contrast.length,
+    worstRatio: sorted[0].ratio,
+    normalText,                          // failures held to the 4.5:1 threshold
+    largeText: contrast.length - normalText, // failures at the 3:1 (large/bold) threshold
+    worst: sorted.slice(0, 8),
+  };
 }

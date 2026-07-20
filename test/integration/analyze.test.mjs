@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { launchBrowser, openFixture, VIEWPORTS } from "../helpers/browser.mjs";
 import { runLayout, readViewportMeta } from "../../src/analyze/layout.mjs";
 import { runStrict } from "../../src/analyze/strict.mjs";
-import { runAxe } from "../../src/analyze/axe.mjs";
+import { runAxe, contrastSummary } from "../../src/analyze/axe.mjs";
 import { walkTabOrder, detectKeyboardTrap } from "../../src/analyze/keyboard.mjs";
 import { readHeadings } from "../../src/analyze/headings.mjs";
 import { readLandmarks, landmarkFindings } from "../../src/analyze/landmarks.mjs";
@@ -57,6 +57,18 @@ test("axe: { passes: true } reports the criteria axe tested and passed", opts, a
   const { passedSc } = await runAxe(page, VIEWPORTS, { passes: true });
   assert.ok(Array.isArray(passedSc) && passedSc.length > 0, "expected some passed WCAG criteria");
   assert.ok(passedSc.every(sc => /^\d\.\d\.\d+$/.test(sc)), "each is an SC like 1.4.3");
+  await page.context().close();
+});
+
+test("axe: captures measured contrast ratios from the low-contrast fixture", opts, async () => {
+  const url = pathToFileURL(path.join(HERE, "..", "fixtures", "low-contrast.html")).href;
+  const page = await openFixture(browser, url);
+  const { contrast } = await runAxe(page, VIEWPORTS);
+  assert.ok(contrast.length >= 1, "expected at least one contrast failure (grey on white)");
+  assert.ok(contrast.every(c => c.ratio < c.required), "each row is below its required ratio");
+  const s = contrastSummary(contrast);
+  assert.ok(s && s.worstRatio < 4.5, "summary reports a sub-4.5:1 worst ratio");
+  assert.equal(s.count, contrast.length);
   await page.context().close();
 });
 

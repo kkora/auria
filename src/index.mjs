@@ -101,6 +101,7 @@ export async function runAudit(job) {
       const axeResult = await runAxe(page, viewports, { passes: wantVpat });
       analysis.axe = axeResult.byViewport;
       analysis.axePassedSc = axeResult.passedSc;
+      analysis.contrast = axeResult.contrast;
       analysis.viewportMeta = await readViewportMeta(page);
       analysis.layout = await runLayout(page, viewports);
       if (job.screenshots) analysis.screenshots = await captureScreenshots(page, analysis, { viewports, outDir, name });
