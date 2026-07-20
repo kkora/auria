@@ -28,6 +28,7 @@ Task-oriented, step-by-step walkthroughs for each Auria feature. These are the
 | [CI gating & baselines](ci-gating-and-baselines.md) | Fail a build on regressions; diff against a previous run. |
 | [Dashboards](dashboards.md) | Browse findings across all audited pages in one place. |
 | [Run in Docker](docker.md) | Run the full audit (incl. narrated video) headless in a Linux container. |
+| [Deploy](deployment.md) | Publish the image (GHCR) and run it as a job (VM / Cloud Run / ECS / k8s). |
 
 ## Reference docs (not guides)
 
