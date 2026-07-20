@@ -205,7 +205,8 @@ Web app (Next.js)  ──►  API (REST) ──►  Job queue (Redis/BullMQ or S
 3. **P3 — Compliance deliverables:** VPAT/ACR generator + polished evidence video.
    First thing gov will *pay* for — sellable before full SaaS.
 4. **P4 — Hosted platform:** API, workers, dashboard, scheduling, billing; self-hosted
-   enterprise build alongside.
+   enterprise build alongside. **Design:** [p4-saas-design.md](p4-saas-design.md) (awaiting
+   sign-off before any code; the SaaS lives in a separate repo, not this OSS engine).
 
 ---
 
