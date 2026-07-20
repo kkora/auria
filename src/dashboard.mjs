@@ -13,6 +13,18 @@ import path from "node:path";
 
 const escapeHtml = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+// Inline SVG sparkline of a numeric series — self-contained (no JS, no external image), so it
+// survives the dashboard being copied around. Decorative: the delta chip carries the meaning.
+function sparkline(values, w = 72, h = 18) {
+  const n = values.length;
+  const max = Math.max(...values), min = Math.min(...values);
+  const span = max - min || 1;
+  const x = i => (n === 1 ? 0 : (i / (n - 1)) * (w - 2)) + 1;
+  const y = v => h - 1 - ((v - min) / span) * (h - 2);
+  const pts = values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true" focusable="false"><polyline points="${pts}" fill="none" stroke="#4A5A70" stroke-width="1.5"/></svg>`;
+}
+
 // Scan <base>/<host>/<page>/ into dashboard rows. Each row keeps the raw artifact
 // filenames so links can be built with the right relative prefix per dashboard.
 export async function collectRows(base) {
@@ -37,8 +49,12 @@ export async function collectRows(base) {
       let vpat = null;
       const vpatFile = files.find(f => f.endsWith("-vpat.json"));
       if (vpatFile) { try { vpat = JSON.parse(await readFile(path.join(dir, vpatFile), "utf8")).summary || null; } catch { /* skip malformed */ } }
+      // Conformance history (for the trend sparkline), if runs have accrued.
+      let history = null;
+      const histFile = files.find(f => f.endsWith("-vpat-history.json"));
+      if (histFile) { try { const h = JSON.parse(await readFile(path.join(dir, histFile), "utf8")); if (Array.isArray(h)) history = h; } catch { /* skip malformed */ } }
       rows.push({
-        host: h.name, page: p.name, date: a.date || "", url: a.url || "", viol, layoutIssues, vpat,
+        host: h.name, page: p.name, date: a.date || "", url: a.url || "", viol, layoutIssues, vpat, history,
         // Only artifacts that actually exist, so the Artifacts column never shows an orphan "—".
         artifacts: [files.find(f => /\.(mp4|webm)$/.test(f)), files.find(f => f.endsWith("-report.md")),
                     files.find(f => f.endsWith("-report.pdf")),
@@ -60,9 +76,20 @@ export function renderDashboard(rows, hrefFor, showHost, date = new Date().toISO
     ? r.artifacts.map(f => `<a href="${hrefFor(r, f)}">${f.includes("-vpat.") ? "vpat" : f.split(".").pop()}</a>`).join(" · ")
     : "—";
   // VPAT conformance: failing = partial + does-not-support; the muted line notes what a human still owns.
-  const conf = r => r.vpat
-    ? `${chip(r.vpat.partiallySupports + r.vpat.doesNotSupport, "failing")}<div class="muted">${r.vpat.notEvaluated} not evaluated</div>`
-    : "—";
+  const failingOf = s => (s?.partiallySupports || 0) + (s?.doesNotSupport || 0);
+  const conf = r => {
+    if (!r.vpat) return "—";
+    const base = `${chip(failingOf(r.vpat), "failing")}<div class="muted">${r.vpat.notEvaluated} not evaluated</div>`;
+    const series = (r.history || []).map(p => failingOf(p.summary));
+    if (series.length < 2) return base;
+    // Failing count over time: lower is better, so a rise is a regression.
+    const delta = series[series.length - 1] - series[series.length - 2];
+    const glyph = t => `<span aria-hidden="true">${t}</span>`;
+    const trend = delta > 0 ? `<span class="chip bad">${glyph("▲")} ${delta} more failing</span>`
+      : delta < 0 ? `<span class="chip ok">${glyph("▼")} ${-delta} fewer failing</span>`
+      : `<span class="muted">no change</span>`;
+    return `${base}<div class="trend">${sparkline(series)} ${trend}</div>`;
+  };
   return `<!doctype html><html lang="en"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Accessibility Audit Dashboard</title>
@@ -76,6 +103,7 @@ export function renderDashboard(rows, hrefFor, showHost, date = new Date().toISO
   .chip{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.8rem;font-weight:600}
   .ok{background:#E6F4EC;color:#0F6B45}.bad{background:#FDECEA;color:#B3261E}
   .host,.muted{color:#4A5A70;font-size:.85rem} a{color:#1F5FD0}
+  .trend{display:flex;align-items:center;gap:6px;margin-top:6px} .spark{flex:none}
 </style>
 <h1>Accessibility Audit Dashboard</h1>
 <p class="sub">Generated ${date} · ${rows.length} page${rows.length > 1 ? "s" : ""} audited</p>

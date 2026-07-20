@@ -8,8 +8,12 @@ import { collectRows, renderDashboard, writeDashboards } from "../../src/dashboa
 
 const rows = [
   { host: "example.com", page: "pay", date: "2026-07-19", url: "https://example.com/pay", viol: 3, layoutIssues: 0,
-    vpat: { supports: 9, partiallySupports: 4, doesNotSupport: 1, notEvaluated: 41 }, artifacts: ["pay-report.pdf", "pay-vpat.pdf"] },
-  { host: "example.com", page: "home", date: "2026-07-19", url: "https://example.com/", viol: 0, layoutIssues: 2, vpat: null, artifacts: [] },
+    vpat: { supports: 9, partiallySupports: 4, doesNotSupport: 1, notEvaluated: 41 },
+    // failing went 3 -> 5 across two runs -> a regression of +2
+    history: [{ date: "2026-07-12", summary: { partiallySupports: 2, doesNotSupport: 1, notEvaluated: 41 } },
+              { date: "2026-07-19", summary: { partiallySupports: 4, doesNotSupport: 1, notEvaluated: 41 } }],
+    artifacts: ["pay-report.pdf", "pay-vpat.pdf"] },
+  { host: "example.com", page: "home", date: "2026-07-19", url: "https://example.com/", viol: 0, layoutIssues: 2, vpat: null, history: null, artifacts: [] },
 ];
 
 test("renderDashboard: chips reflect counts, links + host shown, date injected", () => {
@@ -26,6 +30,9 @@ test("renderDashboard: chips reflect counts, links + host shown, date injected",
   assert.ok(html.includes('<span class="chip bad">5 failing</span>'));
   assert.ok(html.includes('<div class="muted">41 not evaluated</div>'));
   assert.equal((html.match(/<th>Conformance<\/th>/g) || []).length, 1);
+  // trend sparkline + delta chip (failing rose 3 -> 5)
+  assert.ok(html.includes('<svg class="spark"'), "inline sparkline rendered");
+  assert.match(html, /▲<\/span> 2 more failing/);
 });
 
 test("renderDashboard: escapes html in fields", () => {
@@ -50,12 +57,17 @@ test("collectRows + writeDashboards: scans an output tree and writes indexes", a
     format: "VPAT-2", summary: { supports: 9, partiallySupports: 4, doesNotSupport: 1, notEvaluated: 41, total: 55 },
   }));
   await writeFile(path.join(dir, "pay-vpat.pdf"), "%PDF-vpat-stub");
+  await writeFile(path.join(dir, "pay-vpat-history.json"), JSON.stringify([
+    { date: "2026-07-12", summary: { partiallySupports: 2, doesNotSupport: 1, notEvaluated: 41 } },
+    { date: "2026-07-19", summary: { partiallySupports: 4, doesNotSupport: 1, notEvaluated: 41 } },
+  ]));
   try {
     const rowsFound = await collectRows(base);
     assert.equal(rowsFound.length, 1);
     assert.equal(rowsFound[0].viol, 1);           // one axe violation
     assert.equal(rowsFound[0].layoutIssues, 2);   // overflow (1) + one small target (1)
     assert.deepEqual(rowsFound[0].vpat, { supports: 9, partiallySupports: 4, doesNotSupport: 1, notEvaluated: 41, total: 55 });
+    assert.equal(rowsFound[0].history.length, 2); // conformance history for the sparkline
     assert.deepEqual(rowsFound[0].artifacts, ["pay-report.pdf", "pay-vpat.pdf"]);
 
     const written = await writeDashboards(base);
