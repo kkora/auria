@@ -145,11 +145,13 @@ function collectFindings(analysis) {
   return f;
 }
 
-// Resolve one criterion to { level, remarks }.
-function resolve(sc, findings) {
+// Resolve one criterion to { level, remarks }. `passedSc` is the set of criteria axe
+// tested and passed (present only when the audit ran with { passes: true }).
+function resolve(sc, findings, passedSc) {
   const hits = findings[sc];
   if (hits) return { level: sc === "2.1.2" ? "Does Not Support" : "Partially Supports", remarks: hits.join(" ") };
   if (AURIA_EVALUATES.has(sc)) return { level: "Supports", remarks: "No issues detected by the automated checks covering this criterion." };
+  if (passedSc.has(sc)) return { level: "Supports", remarks: "Passed the automated axe-core checks for this criterion." };
   return { level: "Not Evaluated", remarks: "Not covered by automated testing — requires manual review." };
 }
 
@@ -158,19 +160,20 @@ export function buildVpat(analysis, {
   standard = "WCAG 2.2 Level AA",
 } = {}) {
   const findings = collectFindings(analysis);
+  const passedSc = new Set(analysis.axePassedSc || []);
   const name = product || title || analysis.title || url || "the evaluated page";
 
   const table = lvl => [
     "| Criteria | Conformance Level | Remarks and Explanations |",
     "| --- | --- | --- |",
     ...WCAG.filter(w => w[2] === lvl).map(([sc, scName]) => {
-      const { level, remarks } = resolve(sc, findings);
+      const { level, remarks } = resolve(sc, findings, passedSc);
       return `| ${sc} ${cell(scName)} | ${level} | ${cell(remarks)} |`;
     }),
   ].join("\n");
 
   const tally = {};
-  for (const [sc] of WCAG) { const { level } = resolve(sc, findings); tally[level] = (tally[level] || 0) + 1; }
+  for (const [sc] of WCAG) { const { level } = resolve(sc, findings, passedSc); tally[level] = (tally[level] || 0) + 1; }
 
   const meta = [
     `- **Name of Product:** ${product || title || analysis.title || "—"}`,
