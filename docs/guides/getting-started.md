@@ -26,7 +26,7 @@ npm install
 Point Auria at any URL:
 
 ```bash
-node bin/auria.mjs https://example.gov/payment-page
+node bin/auria.mjs https://example.com/payment-page
 ```
 
 This runs the full pipeline: analyze → narrate → record video → write reports →
@@ -37,7 +37,7 @@ update the dashboard.
 Recording the narrated video is the slow part. While iterating, skip it:
 
 ```bash
-node bin/auria.mjs https://example.gov/payment-page --no-video
+node bin/auria.mjs https://example.com/payment-page --no-video
 ```
 
 You still get the PDF report, `-axe.json`, and the dashboard — just no `.mp4`. This
@@ -49,7 +49,7 @@ Results land under `a11y-audits/<host>/<page>/` by default:
 
 ```
 a11y-audits/
-  example.gov/
+  example.com/
     payment-page/
       payment-page.mp4          ← narrated walkthrough (unless --no-video)
       payment-page-report.pdf   ← full human-readable report

@@ -15,9 +15,9 @@ Top-level keys are defaults; each entry in `pages[]` can override any of them.
   "pdf": true,
   "tabs": 10,
   "pages": [
-    { "url": "https://example.gov/pay",     "name": "payment-page", "tabs": 14 },
-    { "url": "https://example.gov/receipt", "name": "receipt-page" },
-    { "url": "https://example.gov/" }
+    { "url": "https://example.com/pay",     "name": "payment-page", "tabs": 14 },
+    { "url": "https://example.com/receipt", "name": "receipt-page" },
+    { "url": "https://example.com/" }
   ]
 }
 ```
@@ -51,7 +51,7 @@ Some issues only appear after interaction (validation errors, an expanded panel)
 ```jsonc
 {
   "pages": [{
-    "url": "https://example.gov/pay",
+    "url": "https://example.com/pay",
     "steps": [
       { "click": "#pay-by-card" },
       { "fill": "#amount", "value": "0" },

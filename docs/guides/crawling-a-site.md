@@ -6,7 +6,7 @@ breadth-first search. Semantics reference: [crawl.md](../crawl.md).
 ## Step 1 — Crawl from a seed URL
 
 ```bash
-node bin/auria.mjs https://example.gov/ --crawl
+node bin/auria.mjs https://example.com/ --crawl
 ```
 
 Auria walks links breadth-first from the seed, bounded by defaults **20 pages** and
@@ -15,7 +15,7 @@ Auria walks links breadth-first from the seed, bounded by defaults **20 pages** 
 ## Step 2 — Set the bounds
 
 ```bash
-node bin/auria.mjs https://example.gov/ --crawl --max-pages 50 --max-depth 4
+node bin/auria.mjs https://example.com/ --crawl --max-pages 50 --max-depth 4
 ```
 
 - `--max-pages` — hard ceiling on pages audited (default 20).
@@ -38,7 +38,7 @@ only if it matches `include` (when set) **and** not `exclude`.
 ```jsonc
 // crawl.json
 {
-  "pages": [{ "url": "https://example.gov/" }],
+  "pages": [{ "url": "https://example.com/" }],
   "crawl": {
     "maxPages": 40,
     "include": "/forms/",

@@ -13,7 +13,7 @@ for the crawl and every audit.
 Both flags are **repeatable**:
 
 ```bash
-node bin/auria.mjs https://example.gov/account \
+node bin/auria.mjs https://example.com/account \
   --cookie "session=abc123" \
   --cookie "csrf=xyz789" \
   --header "Authorization: Bearer <token>"
@@ -32,7 +32,7 @@ Add an `auth` block. Put it top-level to apply to all pages, or per-page to over
 {
   "auth": { "cookies": "session=abc123; csrf=xyz789",
             "headers": { "Authorization": "Bearer <token>" } },
-  "pages": [{ "url": "https://example.gov/account" }]
+  "pages": [{ "url": "https://example.com/account" }]
 }
 ```
 
@@ -42,10 +42,10 @@ Add an `auth` block. Put it top-level to apply to all pages, or per-page to over
 {
   "auth": {
     "cookies": [
-      { "name": "session", "value": "abc123", "domain": ".example.gov", "path": "/" }
+      { "name": "session", "value": "abc123", "domain": ".example.com", "path": "/" }
     ]
   },
-  "pages": [{ "url": "https://example.gov/account" }]
+  "pages": [{ "url": "https://example.com/account" }]
 }
 ```
 

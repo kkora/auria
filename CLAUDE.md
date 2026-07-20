@@ -39,14 +39,14 @@ npm install
 
 ```bash
 # Single page
-node bin/auria.mjs https://example.gov/payment-page
+node bin/auria.mjs https://example.com/payment-page
 
 # Analysis only (fast, no video) — the iteration loop
-node bin/auria.mjs https://example.gov/payment-page --no-video
+node bin/auria.mjs https://example.com/payment-page --no-video
 
 # Many pages / a whole site
 node bin/auria.mjs --config examples/pages.sample.json
-node bin/auria.mjs https://example.gov/ --crawl --max-pages 20
+node bin/auria.mjs https://example.com/ --crawl --max-pages 20
 ```
 
 Full flag + config reference: [docs/cli.md](docs/cli.md).
