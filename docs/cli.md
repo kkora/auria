@@ -29,7 +29,7 @@ node bin/auria.mjs --config <file.json>
 | `--fail-on minor\|moderate\|serious\|critical` | CI gate (exit 2 on breach) | off |
 | `--screenshots` | Annotated PNG per viewport | off |
 | `--sarif`, `--junit` | Machine-readable results | off |
-| `--vpat` | Draft VPAT®/ACR conformance report (`<page>-vpat.md` + PDF) | off |
+| `--vpat` | Draft VPAT®/ACR conformance report (`<page>-vpat.md` + PDF + `.json`) | off |
 | `--nvda` | Real NVDA screen reader (see [nvda.md](nvda.md)) | off |
 | `--crawl` | Audit every same-origin page (see [crawl.md](crawl.md)) | off |
 | `--max-pages <n>`, `--max-depth <n>` | Crawl bounds | 20, 3 |

@@ -15,7 +15,11 @@ human-legible evidence in one run.
 ```bash
 node bin/auria.mjs https://example.com/page --vpat --out audits
 # writes audits/example.com/page/page-vpat.md  (+ page-vpat.pdf unless --no-pdf)
+#      and page-vpat.json (machine-readable — for dashboards, trend tracking, tooling)
 ```
+
+The **`.json`** form carries the same result as structured data:
+`{ format, standard, product, summary: { supports, partiallySupports, … }, criteria: [{ sc, name, level, conformance, remarks }] }` — feed it to a dashboard or diff it over time.
 
 In a container: `docker run … --vpat`.
 

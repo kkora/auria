@@ -21,7 +21,7 @@ import { buildMarkdown } from "./report/markdown.mjs";
 import { renderPdf } from "./report/pdf.mjs";
 import { buildSarif } from "./report/sarif.mjs";
 import { buildJunit } from "./report/junit.mjs";
-import { buildVpat, buildSiteVpat } from "./report/vpat.mjs";
+import { buildVpat, buildVpatData, buildSiteVpat, buildSiteVpatData } from "./report/vpat.mjs";
 import { captureScreenshots } from "./report/screenshots.mjs";
 import { writeDashboards } from "./dashboard.mjs";
 import { recordVideo } from "./record.mjs";
@@ -150,8 +150,10 @@ export async function runAudit(job) {
     if (job.vpat) {
       // `vpat` may be `true` (CLI flag) or an object of VPAT metadata from the config.
       const vpatMeta = typeof job.vpat === "object" ? job.vpat : {};
-      const vpatMd = buildVpat(analysis, { url: job.url, title: analysis.title, date: analysis.date, product: job.name, ...vpatMeta });
+      const vctx = { url: job.url, title: analysis.title, date: analysis.date, product: job.name, ...vpatMeta };
+      const vpatMd = buildVpat(analysis, vctx);
       await writeFile(path.join(outDir, `${name}-vpat.md`), vpatMd);
+      await writeFile(path.join(outDir, `${name}-vpat.json`), JSON.stringify(buildVpatData(analysis, vctx), null, 2));
       if (wantPdf) await renderPdf(browser, vpatMd, path.join(outDir, `${name}-vpat.pdf`));
     }
 
@@ -197,8 +199,10 @@ export async function runJobs(jobs) {
     if (rs.length < 2) continue; // a single page already has its own VPAT
     const { base, host } = rs[0];
     try {
-      const md = buildSiteVpat(rs.map(r => r.analysis), { product: host, date: rs[0].analysis.date });
+      const analyses = rs.map(r => r.analysis);
+      const md = buildSiteVpat(analyses, { product: host, date: rs[0].analysis.date });
       await writeFile(path.join(base, `${host}-vpat.md`), md);
+      await writeFile(path.join(base, `${host}-vpat.json`), JSON.stringify(buildSiteVpatData(analyses, { product: host, date: rs[0].analysis.date }), null, 2));
       if (rs.some(r => r.pdf)) {
         const browser = await launchBrowser();
         try { await renderPdf(browser, md, path.join(base, `${host}-vpat.pdf`)); }

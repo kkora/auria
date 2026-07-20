@@ -36,6 +36,11 @@ test("runAudit: analysis-only run emits axe.json, md, pdf, sarif, junit", opts, 
     const vpat = await readFile(path.join(dir, "broken-vpat.md"), "utf8");
     assert.match(vpat, /Accessibility Conformance Report/);
     assert.match(vpat, /1\.1\.1 Non-text Content \| Partially Supports/); // fixture <img> has no alt
+    // machine-readable JSON VPAT
+    const vjson = JSON.parse(await readFile(path.join(dir, "broken-vpat.json"), "utf8"));
+    assert.equal(vjson.format, "VPAT-2");
+    assert.equal(vjson.criteria.length, 55);
+    assert.equal(vjson.criteria.find(c => c.sc === "1.1.1").conformance, "Partially Supports");
   } finally {
     await rm(out, { recursive: true, force: true });
   }
