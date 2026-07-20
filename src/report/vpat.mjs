@@ -72,7 +72,37 @@ const WCAG = [
 // (or "Does Not Support" for the hard failures handled below).
 const AURIA_EVALUATES = new Set(["1.3.1", "1.4.4", "1.4.10", "2.1.2", "2.4.2", "2.4.3", "2.4.6", "2.5.8", "4.1.2"]);
 
+// Revised Section 508 — Chapter 3: Functional Performance Criteria (302.x). These are
+// outcome-based and require human judgement, so automation reports them "Not Evaluated".
+const FPC = [
+  ["302.1", "Without Vision"],
+  ["302.2", "With Limited Vision"],
+  ["302.3", "Without Perception of Color"],
+  ["302.4", "Without Hearing"],
+  ["302.5", "With Limited Hearing"],
+  ["302.6", "Without Speech"],
+  ["302.7", "With Limited Manipulation"],
+  ["302.8", "With Limited Reach and Strength"],
+  ["302.9", "With Limited Language, Cognitive, and Learning Abilities"],
+];
+
+// Revised Section 508 — Chapter 6: Support Documentation and Services (also manual).
+const SUPPORT_DOCS = [
+  ["602.2", "Accessibility and Compatibility Features"],
+  ["602.3", "Electronic Support Documentation"],
+  ["602.4", "Alternate Formats for Non-Electronic Support Documentation"],
+  ["603.2", "Information on Accessibility and Compatibility Features"],
+  ["603.3", "Accommodation of Communication Needs"],
+];
+
 const cell = s => String(s).replace(/\|/g, "\\|").replace(/\s+/g, " ").trim();
+
+// A fixed-conformance table for the manual-review chapters (508 Ch. 3 / Ch. 6).
+const staticTable = (rows, level, remark) => [
+  "| Criteria | Conformance Level | Remarks and Explanations |",
+  "| --- | --- | --- |",
+  ...rows.map(([id, nm]) => `| ${id} ${cell(nm)} | ${level} | ${cell(remark)} |`),
+].join("\n");
 
 // Collect { sc -> [finding strings] } from the analysis: axe violations (mapped via
 // their wcagNNN tags) plus Auria's own checks.
@@ -123,7 +153,10 @@ function resolve(sc, findings) {
   return { level: "Not Evaluated", remarks: "Not covered by automated testing — requires manual review." };
 }
 
-export function buildVpat(analysis, { url, title, date, product, standard = "WCAG 2.2 Level AA" } = {}) {
+export function buildVpat(analysis, {
+  url, title, date, product, version, vendor, contact, description,
+  standard = "WCAG 2.2 Level AA",
+} = {}) {
   const findings = collectFindings(analysis);
   const name = product || title || analysis.title || url || "the evaluated page";
 
@@ -139,14 +172,22 @@ export function buildVpat(analysis, { url, title, date, product, standard = "WCA
   const tally = {};
   for (const [sc] of WCAG) { const { level } = resolve(sc, findings); tally[level] = (tally[level] || 0) + 1; }
 
+  const meta = [
+    `- **Name of Product:** ${product || title || analysis.title || "—"}`,
+    ...(version ? [`- **Version:** ${version}`] : []),
+    ...(vendor ? [`- **Vendor / Company:** ${vendor}`] : []),
+    `- **URL evaluated:** ${url || "—"}`,
+    `- **Report Date:** ${date || analysis.date || ""}`,
+    ...(contact ? [`- **Contact:** ${contact}`] : []),
+    ...(description ? [`- **Product Description:** ${description}`] : []),
+    `- **Evaluation Methods Used:** Automated audit (Auria — axe-core plus layout, reflow, and keyboard checks). Manual review pending for the "Not Evaluated" rows.`,
+    `- **Applicable Standards:** ${standard}; Revised Section 508 (Chapters 3–6); EN 301 549.`,
+  ];
+
   const md = [];
   md.push(`# Accessibility Conformance Report (VPAT®) — ${name}`, "",
-    `**Standard:** ${standard}  ·  **Report format:** VPAT® 2`, "",
-    `- **Product / page:** ${name}`,
-    `- **URL evaluated:** ${url || "—"}`,
-    `- **Date:** ${date || analysis.date || ""}`,
-    `- **Evaluation method:** Automated audit (Auria — axe-core plus layout, reflow, and keyboard checks).`,
-    "",
+    `**Report format:** VPAT® 2  ·  **Primary standard:** ${standard}`, "",
+    ...meta, "",
     "> **This is an auto-generated draft.** Automated testing detects failures but cannot",
     "> prove full conformance. A qualified reviewer must evaluate every **Not Evaluated**",
     "> row (and confirm the automated results) before this report is published or relied on.",
@@ -156,14 +197,29 @@ export function buildVpat(analysis, { url, title, date, product, standard = "WCA
     "- **Partially Supports** — the automated checks found some issues (see Remarks).",
     "- **Does Not Support** — a clear failure was detected.",
     "- **Not Evaluated** — not covered by automated testing; requires manual review.",
+    "- **Not Applicable** — the criterion does not apply to this product.",
     "",
-    "## Summary", "",
-    `Supports: ${tally["Supports"] || 0} · Partially Supports: ${tally["Partially Supports"] || 0} · Does Not Support: ${tally["Does Not Support"] || 0} · Not Evaluated: ${tally["Not Evaluated"] || 0} (of ${WCAG.length} WCAG 2.2 A/AA criteria)`,
+    "## Summary (WCAG 2.2 A/AA)", "",
+    `Supports: ${tally["Supports"] || 0} · Partially Supports: ${tally["Partially Supports"] || 0} · Does Not Support: ${tally["Does Not Support"] || 0} · Not Evaluated: ${tally["Not Evaluated"] || 0} (of ${WCAG.length} criteria)`,
     "",
-    "## WCAG 2.2 Report", "",
-    "### Table 1: Success Criteria, Level A", "",
+    "## Table 1: WCAG 2.2 Report", "",
+    "### Level A", "",
     table("A"), "",
-    "### Table 2: Success Criteria, Level AA", "",
-    table("AA"), "");
+    "### Level AA", "",
+    table("AA"), "",
+    "## Table 2: Revised Section 508 Report", "",
+    "### Chapter 3: Functional Performance Criteria (FPC)", "",
+    "Outcome-based criteria that require manual, assistive-technology testing to assess.",
+    "", staticTable(FPC, "Not Evaluated", "Requires manual review with assistive technology."), "",
+    "### Chapter 4: Hardware", "",
+    "Not applicable — Auria audits web content, not hardware.", "",
+    "### Chapter 5: Software", "",
+    "For web content, software requirements are met through the WCAG 2.2 Report (Table 1).", "",
+    "### Chapter 6: Support Documentation and Services", "",
+    staticTable(SUPPORT_DOCS, "Not Evaluated", "Requires manual review of the product's documentation and support."), "",
+    "## Table 3: EN 301 549 Report", "",
+    "EN 301 549 Chapter 9 (Web) incorporates the WCAG success criteria, so the WCAG 2.2",
+    "Report (Table 1) applies. Chapters 11 (software), 12 (documentation), and the",
+    "closed-functionality / interoperability clauses require separate manual review.", "");
   return md.join("\n");
 }

@@ -25,6 +25,7 @@ Task-oriented, step-by-step walkthroughs for each Auria feature. These are the
 | [Narrated video](narrated-video.md) | Produce the shareable narrated `.mp4`/`.webm` walkthrough. |
 | [Real NVDA mode](nvda-mode.md) | Capture what an actual screen reader announces (Windows). |
 | [Reports & artifacts](reports-and-artifacts.md) | Understand every file a run emits (PDF, MD, JSON, SARIF, JUnit, screenshots). |
+| [Compliance (VPAT/ACR)](compliance.md) | Generate a draft VPAT® 2 / ACR conformance report with `--vpat`. |
 | [CI gating & baselines](ci-gating-and-baselines.md) | Fail a build on regressions; diff against a previous run. |
 | [Dashboards](dashboards.md) | Browse findings across all audited pages in one place. |
 | [Run in Docker](docker.md) | Run the full audit (incl. narrated video) headless in a Linux container. |

@@ -27,8 +27,32 @@ test("buildVpat: header, standard, and draft disclaimer", () => {
   assert.match(md, /Accessibility Conformance Report \(VPAT/);
   assert.match(md, /WCAG 2\.2 Level AA/);
   assert.match(md, /auto-generated draft/i);
-  assert.ok(md.includes("### Table 1: Success Criteria, Level A"));
-  assert.ok(md.includes("### Table 2: Success Criteria, Level AA"));
+  assert.ok(md.includes("## Table 1: WCAG 2.2 Report"));
+  assert.ok(md.includes("### Level A"));
+  assert.ok(md.includes("### Level AA"));
+});
+
+test("buildVpat: renders product metadata when provided", () => {
+  const md = buildVpat(analysis, {
+    url: analysis.url, product: "Acme Portal", version: "3.2", vendor: "Acme Inc.",
+    contact: "a11y@acme.example", description: "Citizen services portal",
+  });
+  assert.match(md, /\*\*Name of Product:\*\* Acme Portal/);
+  assert.match(md, /\*\*Version:\*\* 3\.2/);
+  assert.match(md, /\*\*Vendor \/ Company:\*\* Acme Inc\./);
+  assert.match(md, /\*\*Contact:\*\* a11y@acme\.example/);
+  assert.match(md, /Citizen services portal/);
+});
+
+test("buildVpat: includes the Section 508 and EN 301 549 chapters", () => {
+  const md = buildVpat(analysis, { url: analysis.url });
+  assert.ok(md.includes("## Table 2: Revised Section 508 Report"));
+  assert.match(md, /Chapter 3: Functional Performance Criteria/);
+  assert.match(md, /\| 302\.1 Without Vision \| Not Evaluated \|/);
+  assert.match(md, /Chapter 4: Hardware/);
+  assert.match(md, /Chapter 6: Support Documentation and Services/);
+  assert.match(md, /\| 602\.2 .* \| Not Evaluated \|/);
+  assert.ok(md.includes("## Table 3: EN 301 549 Report"));
 });
 
 test("buildVpat: axe wcag tags map to their SC rows as Partially Supports", () => {
