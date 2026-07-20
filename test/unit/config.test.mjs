@@ -132,9 +132,10 @@ test("parseCli: repeated cookies join and header splits on first colon", () => {
   assert.deepEqual(jobs[0].auth.headers, { Authorization: "Bearer z" });
 });
 
-test("parseCli: --crawl surfaces crawl bounds", () => {
-  const { crawlOpts } = parseCli(["https://x.gov/", "--crawl", "--max-pages", "5"]);
+test("parseCli: --crawl surfaces both crawl bounds", () => {
+  const { crawlOpts } = parseCli(["https://x.gov/", "--crawl", "--max-pages", "5", "--max-depth", "4"]);
   assert.equal(crawlOpts.maxPages, "5");
+  assert.equal(crawlOpts.maxDepth, "4");
 });
 
 test("parseCli: no URL throws usageError", () => {

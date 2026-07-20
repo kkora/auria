@@ -2,11 +2,11 @@
 // analysis-only artifacts. Self-skips when no Edge/Chrome is available.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { access, rm } from "node:fs/promises";
+import { access, rm, readFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { launchBrowser } from "../helpers/browser.mjs";
-import { runAudit } from "../../src/index.mjs";
+import { runAudit, runJobs } from "../../src/index.mjs";
 
 const FIXTURE = new URL("../fixtures/broken-page.html", import.meta.url).href;
 
@@ -58,6 +58,33 @@ test("runAudit: --nvda surfaces install guidance when NVDA is unavailable", opts
   } finally {
     if (prev === undefined) delete process.env.GUIDEPUP_NVDA_UNAVAILABLE;
     else process.env.GUIDEPUP_NVDA_UNAVAILABLE = prev;
+    await rm(out, { recursive: true, force: true });
+  }
+});
+
+test("runAudit: baseline:auto diffs against the previous run", opts, async () => {
+  const out = path.join(os.tmpdir(), `auria-e2e-baseline-${process.pid}`);
+  try {
+    // First run writes the baseline axe.json.
+    await runAudit({ url: FIXTURE, out, name: "broken", video: false, pdf: false });
+    // Second run diffs against it; nothing changed, so all violations are "unchanged".
+    await runAudit({ url: FIXTURE, out, name: "broken", video: false, pdf: false, md: true, baseline: "auto" });
+    const md = await readFile(path.join(out, "site", "broken", "broken-report.md"), "utf8");
+    assert.match(md, /## Baseline comparison/);
+    assert.match(md, /\*\*0 new\*\*, \*\*0 fixed\*\*/);
+  } finally {
+    await rm(out, { recursive: true, force: true });
+  }
+});
+
+test("runJobs: exit code 0 when all pass, 2 on fail-on breach, 1 when all fail", opts, async () => {
+  const out = path.join(os.tmpdir(), `auria-e2e-jobs-${process.pid}`);
+  try {
+    assert.equal(await runJobs([{ url: FIXTURE, out, name: "ok", video: false, pdf: false }]), 0);
+    assert.equal(await runJobs([{ url: FIXTURE, out, name: "gate", video: false, pdf: false, failOn: "minor" }]), 2);
+    // an unreachable URL makes the only job fail -> exit 1
+    assert.equal(await runJobs([{ url: "file:///no/such/auria-missing.html", out, name: "bad", video: false, pdf: false }]), 1);
+  } finally {
     await rm(out, { recursive: true, force: true });
   }
 });

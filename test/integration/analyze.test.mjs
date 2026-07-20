@@ -18,10 +18,13 @@ const FIXTURE = pathToFileURL(path.join(HERE, "..", "fixtures", "broken-page.htm
 const browser = await launchBrowser();
 const opts = browser ? {} : { skip: "no Edge/Chrome available" };
 
-test("layout: detects horizontal overflow on the broken fixture", opts, async () => {
+test("layout: detects overflow, sub-24px targets, and sub-12px text on the broken fixture", opts, async () => {
   const page = await openFixture(browser, FIXTURE);
   const layout = await runLayout(page, VIEWPORTS);
-  assert.ok(layout.Phone.overflowPx > 1, "expected phone-width overflow");
+  assert.ok(layout.Phone.overflowPx > 1, "expected phone-width overflow (.wide is 2000px)");
+  // the fixture has a 16×16 .small-btn (WCAG 2.5.8) and a 9px .tiny paragraph
+  assert.ok(layout.Phone.smallTargets.some(t => /small-btn/.test(t.el)), "expected the 16px button flagged");
+  assert.ok(layout.Phone.tinyText.some(t => /tiny/.test(t.el) && t.px < 12), "expected the 9px text flagged");
   await page.context().close();
 });
 
@@ -31,10 +34,11 @@ test("layout: broken fixture has no viewport meta (WCAG 1.4.10 signal)", opts, a
   await page.context().close();
 });
 
-test("strict: reflow320 reports overflow on the broken fixture", opts, async () => {
+test("strict: reflow320 and zoom200 both report overflow on the broken fixture", opts, async () => {
   const page = await openFixture(browser, FIXTURE);
   const strict = await runStrict(page);
   assert.ok(strict.reflow320 > 0, "expected 320px reflow overflow");
+  assert.ok(strict.zoom200 > 0, "expected 200%-zoom overflow (.wide 2000px >> 640px equivalent)");
   await page.context().close();
 });
 
