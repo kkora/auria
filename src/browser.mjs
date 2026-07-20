@@ -9,12 +9,15 @@ import { chromium } from "playwright-core";
 // `npx playwright install chromium` has run). Throws with the real cause if none work.
 // `headless` defaults to Playwright's default; pass false for headed (e.g. NVDA).
 export async function launchBrowser({ headless } = {}) {
-  let lastErr;
   for (const channel of ["msedge", "chrome"]) {
-    try { return await chromium.launch({ channel, headless }); } catch (e) { lastErr = e; }
+    try { return await chromium.launch({ channel, headless }); } catch {}
   }
-  try { return await chromium.launch({ headless }); } catch (e) { lastErr = e; }
-  throw new Error(`Could not launch a browser (tried Edge, Chrome, bundled Chromium): ${lastErr?.message || "unknown error"}`);
+  // Bundled Chromium last; its error is the most informative to surface if all fail.
+  try {
+    return await chromium.launch({ headless });
+  } catch (e) {
+    throw new Error(`Could not launch a browser (tried Edge, Chrome, bundled Chromium): ${e?.message || "unknown error"}`, { cause: e });
+  }
 }
 
 // Apply config setup steps to put the page into the state to audit. One action key per
