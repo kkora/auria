@@ -39,7 +39,12 @@ export async function recordVideo(browser, job, { plan, analysis, emu = {}, auth
   const tts = await getTts();
   await tts.synth(plan.map(p => p.text), { voice: job.voice, rate: job.rate, outDir });
   const stepsJson = path.join(outDir, "_steps.json");
-
+  const narrationWav = path.join(outDir, "_narration.wav");
+  let ctx = null;
+  // Everything below is best-effort: on any failure the finally block cleans the
+  // seg-*.wav / _narration.wav / _steps.json intermediates so they never litter the
+  // published outDir next to the real report artifacts.
+  try {
   // 2. assemble one timeline WAV: silence gaps place each segment at its scheduled start
   const segs = [];
   for (let i = 0; i < plan.length; i++) segs.push(parseWav(await readFile(path.join(outDir, `seg-${i}.wav`))));
@@ -58,11 +63,10 @@ export async function recordVideo(browser, job, { plan, analysis, emu = {}, auth
   hdr.writeUInt16LE(fmt.channels, 22); hdr.writeUInt32LE(fmt.sampleRate, 24);
   hdr.writeUInt32LE(fmt.byteRate, 28); hdr.writeUInt16LE(fmt.byteRate / fmt.sampleRate, 32);
   hdr.writeUInt16LE(fmt.bits, 34); hdr.write("data", 36); hdr.writeUInt32LE(pcm.length, 40);
-  const narrationWav = path.join(outDir, "_narration.wav");
   await writeFile(narrationWav, Buffer.concat([hdr, pcm]));
 
   // 3. record the page while captioning + driving the plan's actions
-  const ctx = await browser.newContext({
+  ctx = await browser.newContext({
     viewport: { width: 1280, height: 900 },
     recordVideo: { dir: outDir, size: { width: 1280, height: 900 } },
     ...emu,
@@ -127,6 +131,7 @@ export async function recordVideo(browser, job, { plan, analysis, emu = {}, auth
 
   const video = page.video();
   await ctx.close();
+  ctx = null;
   const rawVideo = await video.path();
 
   // 4. mux video + narration
@@ -136,14 +141,18 @@ export async function recordVideo(browser, job, { plan, analysis, emu = {}, auth
     : ["-c:v", "copy", "-c:a", "libopus", "-b:a", "96k"];
   const mux = spawnSync(ffmpegPath, ["-y", "-i", rawVideo, "-itsoffset", "0.35", "-i", narrationWav,
     "-map", "0:v", "-map", "1:a", ...codecArgs, "-shortest", outVideo], { encoding: "utf8" });
-  if (mux.status !== 0) throw new Error(mux.stderr.slice(-1200));
+  // spawnSync sets `error` (not stderr) when ffmpeg can't even launch (e.g. missing
+  // binary), leaving stderr null — guard so we surface the real cause, not a TypeError.
+  if (mux.status !== 0) throw new Error(mux.error ? `ffmpeg failed to launch: ${mux.error.message}` : (mux.stderr || "").slice(-1200) || "ffmpeg failed");
   await unlink(rawVideo).catch(() => {});
   const seconds = Math.round(TOTAL / 1000);
 
-  // 5. clean up intermediates
-  for (let i = 0; i < plan.length; i++) await unlink(path.join(outDir, `seg-${i}.wav`)).catch(() => {});
-  await unlink(stepsJson).catch(() => {});
-  await unlink(narrationWav).catch(() => {});
-
   return { outVideo, seconds };
+  } finally {
+    // Always run — even if recording/mux threw — so intermediates never leak.
+    if (ctx) await ctx.close().catch(() => {});
+    for (let i = 0; i < plan.length; i++) await unlink(path.join(outDir, `seg-${i}.wav`)).catch(() => {});
+    await unlink(stepsJson).catch(() => {});
+    await unlink(narrationWav).catch(() => {});
+  }
 }

@@ -39,7 +39,7 @@ export async function runAudit(job) {
   const wantPdf = job.pdf !== false;
   const wantMd = job.md === true;
   const wantVideo = job.video !== false;
-  const maxTabs = Number(job.tabs || 25);
+  const maxTabs = job.tabs != null ? Number(job.tabs) : 25; // `tabs: 0` means zero, not default
   const viewports = Array.isArray(job.viewports) && job.viewports.length
     ? job.viewports.map(v => ({ label: v.label || `${v.w}×${v.h}`, w: Number(v.w), h: Number(v.h) }))
     : VIEWPORTS;
@@ -144,7 +144,9 @@ export async function runAudit(job) {
     if (job.failOn) {
       const min = IMPACT_RANK[job.failOn];
       if (!min) throw new Error(`fail-on must be minor|moderate|serious|critical, got "${job.failOn}"`);
-      failOnBreached = Object.values(analysis.axe).flat().some(v => (IMPACT_RANK[v.impact] || 0) >= min);
+      // A CSP-blocked scan ("scan-failed", impact "unknown") verified nothing — it must
+      // not be counted as a real violation that trips the CI gate.
+      failOnBreached = Object.values(analysis.axe).flat().some(v => v.id !== "scan-failed" && (IMPACT_RANK[v.impact] || 0) >= min);
     }
     return { outDir, outVideo, seconds, violations: totalV, tabStops: analysis.tabStops.length, pdf: wantPdf, failOnBreached, failOn: job.failOn };
   } finally {

@@ -63,16 +63,20 @@ export async function detectKeyboardTrap(page) {
     await page.keyboard.press("Tab");
     const s = await focusSig();
     total++;
+    // Reaching BODY means focus escaped to the document / left the page — that is the
+    // opposite of a trap, so it ends the walk. (Without this, a page with no focusable
+    // elements would report every Tab as "BODY" and be flagged as a bogus trap.)
+    if (s === "BODY") break;
     if (s === prev) {
-      // Repeats never count as a completed cycle — a trapped element can be the
-      // first stop when tabbing resumes mid-page.
+      // Focus is stuck on a real element across Tab presses — a trapped element can be
+      // the first stop when tabbing resumes mid-page.
       same++;
       if (same >= 3) { trapAt = s; break; }
       continue;
     }
     same = 0;
     if (i === 0) first = s;
-    else if (s === first || s === "BODY") break; // full cycle completed
+    else if (s === first) break; // full cycle completed
     prev = s;
   }
   return trapAt ? { status: "trap", at: trapAt, stops: total } : { status: "pass", stops: total };
