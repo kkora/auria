@@ -155,22 +155,32 @@ function resolve(sc, findings, passedSc) {
   return { level: "Not Evaluated", remarks: "Not covered by automated testing — requires manual review." };
 }
 
+// Resolve every WCAG criterion to a structured row (shared by the markdown + JSON forms).
+function criteriaFor(findings, passedSc) {
+  return WCAG.map(([sc, name, level]) => {
+    const { level: conformance, remarks } = resolve(sc, findings, passedSc);
+    return { sc, name, level, conformance, remarks };
+  });
+}
+function summaryOf(criteria) {
+  const s = { Supports: 0, "Partially Supports": 0, "Does Not Support": 0, "Not Evaluated": 0 };
+  for (const c of criteria) s[c.conformance] = (s[c.conformance] || 0) + 1;
+  return s;
+}
+
 // Shared renderer: a resolved findings map + passed-criteria set -> the VPAT markdown.
 function renderVpat(findings, passedSc, {
   url, date, product, version, vendor, contact, description, name, scopeNote,
   standard = "WCAG 2.2 Level AA",
 } = {}) {
+  const criteria = criteriaFor(findings, passedSc);
   const table = lvl => [
     "| Criteria | Conformance Level | Remarks and Explanations |",
     "| --- | --- | --- |",
-    ...WCAG.filter(w => w[2] === lvl).map(([sc, scName]) => {
-      const { level, remarks } = resolve(sc, findings, passedSc);
-      return `| ${sc} ${cell(scName)} | ${level} | ${cell(remarks)} |`;
-    }),
+    ...criteria.filter(c => c.level === lvl).map(c => `| ${c.sc} ${cell(c.name)} | ${c.conformance} | ${cell(c.remarks)} |`),
   ].join("\n");
 
-  const tally = {};
-  for (const [sc] of WCAG) { const { level } = resolve(sc, findings, passedSc); tally[level] = (tally[level] || 0) + 1; }
+  const tally = summaryOf(criteria);
 
   const meta = [
     `- **Name of Product:** ${product || name || "—"}`,
@@ -236,6 +246,14 @@ export function buildVpat(analysis, ctx = {}) {
 // Product-level report aggregating several pages: a criterion fails at the product level
 // if it fails on ANY page; it counts as passed only if some page passed it (and none failed).
 export function buildSiteVpat(analyses, ctx = {}) {
+  const { findings, passedSc } = mergeSite(analyses);
+  const name = ctx.product || ctx.title || "the evaluated site";
+  const scopeNote = `> **Site-wide report** aggregating **${analyses.length}** audited page(s). A criterion is marked failing at the product level if it fails on any page.`;
+  return renderVpat(findings, passedSc, { ...ctx, name, scopeNote });
+}
+
+// Merge several pages into one product-level findings/passed view (shared by md + json).
+function mergeSite(analyses) {
   const merged = {};
   const passedSc = new Set();
   for (const a of analyses) {
@@ -250,7 +268,37 @@ export function buildSiteVpat(analyses, ctx = {}) {
     const arr = [...set];
     findings[sc] = arr.length > 4 ? [...arr.slice(0, 4), `…and ${arr.length - 4} more finding(s) across the site`] : arr;
   }
-  const name = ctx.product || ctx.title || "the evaluated site";
-  const scopeNote = `> **Site-wide report** aggregating **${analyses.length}** audited page(s). A criterion is marked failing at the product level if it fails on any page.`;
-  return renderVpat(findings, passedSc, { ...ctx, name, scopeNote });
+  return { findings, passedSc };
+}
+
+// Machine-readable form of the report (for tooling, dashboards, trend tracking).
+function dataFrom(findings, passedSc, ctx = {}) {
+  const criteria = criteriaFor(findings, passedSc);
+  const s = summaryOf(criteria);
+  return {
+    format: "VPAT-2",
+    standard: ctx.standard || "WCAG 2.2 Level AA",
+    draft: true,
+    product: ctx.product || ctx.name || null,
+    version: ctx.version || null,
+    vendor: ctx.vendor || null,
+    url: ctx.url || null,
+    date: ctx.date || null,
+    ...(ctx.pages ? { pages: ctx.pages } : {}),
+    summary: {
+      supports: s["Supports"], partiallySupports: s["Partially Supports"],
+      doesNotSupport: s["Does Not Support"], notEvaluated: s["Not Evaluated"], total: criteria.length,
+    },
+    criteria, // [{ sc, name, level, conformance, remarks }]
+  };
+}
+
+export function buildVpatData(analysis, ctx = {}) {
+  const name = ctx.product || ctx.title || analysis.title || ctx.url || null;
+  return dataFrom(collectFindings(analysis), new Set(analysis.axePassedSc || []), { ...ctx, name, date: ctx.date || analysis.date });
+}
+
+export function buildSiteVpatData(analyses, ctx = {}) {
+  const { findings, passedSc } = mergeSite(analyses);
+  return dataFrom(findings, passedSc, { ...ctx, name: ctx.product || ctx.title || "the evaluated site", pages: analyses.length });
 }

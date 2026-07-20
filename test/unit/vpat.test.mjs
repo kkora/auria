@@ -1,7 +1,7 @@
 // Unit tests for the VPAT/ACR generator — pure function of the analysis object.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildVpat, buildSiteVpat } from "../../src/report/vpat.mjs";
+import { buildVpat, buildSiteVpat, buildVpatData, buildSiteVpatData } from "../../src/report/vpat.mjs";
 
 const analysis = {
   url: "https://x.gov/pay",
@@ -96,6 +96,31 @@ test("buildVpat: axe-passed criteria become Supports (from analysis.axePassedSc)
   assert.match(md, /\| 1\.4\.1 Use of Color \| Supports \|.*axe/);
   // 1.1.1 has a violation, so a "pass" elsewhere must NOT override it to Supports
   assert.match(md, /\| 1\.1\.1 Non-text Content \| Partially Supports \|/);
+});
+
+test("buildVpatData: structured object with criteria + summary", () => {
+  const d = buildVpatData(analysis, { url: analysis.url, product: "Acme Portal", version: "3.2" });
+  assert.equal(d.format, "VPAT-2");
+  assert.equal(d.standard, "WCAG 2.2 Level AA");
+  assert.equal(d.draft, true);
+  assert.equal(d.product, "Acme Portal");
+  assert.equal(d.version, "3.2");
+  assert.equal(d.criteria.length, 55);
+  assert.equal(d.summary.total, 55);
+  assert.equal(d.summary.supports + d.summary.partiallySupports + d.summary.doesNotSupport + d.summary.notEvaluated, 55);
+  const c111 = d.criteria.find(c => c.sc === "1.1.1");
+  assert.deepEqual({ level: c111.level, conformance: c111.conformance }, { level: "A", conformance: "Partially Supports" });
+  assert.match(c111.remarks, /image-alt/);
+});
+
+test("buildSiteVpatData: aggregates and reports the page count", () => {
+  const clean = { ...analysis, axe: { Desktop: [] }, headings: [{ level: 1, text: "H" }], viewportMeta: "width=device-width",
+    strict: { reflow320: 0, zoom200: 0 }, tabStops: [{ name: "x", role: "link" }],
+    layout: { Desktop: { overflowPx: 0, smallTargets: [], tinyText: [] } }, axePassedSc: [] };
+  const d = buildSiteVpatData([analysis, clean], { product: "Acme" });
+  assert.equal(d.pages, 2);
+  assert.equal(d.criteria.length, 55);
+  assert.equal(d.criteria.find(c => c.sc === "1.1.1").conformance, "Partially Supports"); // fails on page 1
 });
 
 test("buildVpat: SECURITY — never emits auth values", () => {
