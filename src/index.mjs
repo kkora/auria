@@ -58,10 +58,12 @@ export async function runAudit(job) {
   const outDir = path.resolve(job.out || "a11y-audits", host, name);
   await mkdir(outDir, { recursive: true });
 
-  // NVDA runs headed (it reads the focused window); everything else can be headless.
-  const browser = await launchBrowser({ headless: job.nvda ? false : undefined });
   let nvdaDriver = null;
+  let browser = null;
   try {
+    // Preflight NVDA BEFORE launching the browser, so requesting --nvda on a machine
+    // without NVDA surfaces the install guidance (not a browser-launch error) — and
+    // even on a headless box, where the headed NVDA browser couldn't start anyway.
     if (job.nvda) {
       try { nvdaDriver = await nvdaPreflight(); }
       catch (e) {
@@ -69,6 +71,8 @@ export async function runAudit(job) {
           `Install NVDA (nvaccess.org) and run: npx @guidepup/setup`, { cause: e });
       }
     }
+    // NVDA runs headed (it reads the focused window); everything else can be headless.
+    browser = await launchBrowser({ headless: job.nvda ? false : undefined });
     // ---------- analyze ----------
     const analysis = { url: job.url, date: new Date().toISOString().slice(0, 10), axe: {}, headings: [], tabStops: [], title: "", nvdaUsed: false };
     {
@@ -151,7 +155,7 @@ export async function runAudit(job) {
     return { outDir, outVideo, seconds, violations: totalV, tabStops: analysis.tabStops.length, pdf: wantPdf, failOnBreached, failOn: job.failOn };
   } finally {
     if (nvdaDriver) await nvdaDriver.stop().catch(() => {});
-    await browser.close().catch(() => {});
+    if (browser) await browser.close().catch(() => {});
   }
 }
 
