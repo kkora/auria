@@ -66,7 +66,7 @@ export async function runAudit(job) {
       try { nvdaDriver = await nvdaPreflight(); }
       catch (e) {
         throw new Error(`NVDA mode requested but not available: ${e.message}. ` +
-          `Install NVDA (nvaccess.org) and run: npx @guidepup/setup`);
+          `Install NVDA (nvaccess.org) and run: npx @guidepup/setup`, { cause: e });
       }
     }
     // ---------- analyze ----------

@@ -15,6 +15,7 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+      - run: npm run lint
       # Integration suites launch Edge/Chrome, then fall back to bundled Chromium —
       # install it so the browser tests actually run (not silently self-skip) in CI.
       - run: npx playwright install --with-deps chromium
