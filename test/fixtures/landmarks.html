@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Well-Landmarked Fixture</title>
+</head>
+<body>
+  <header>Site banner (page-level -> banner landmark)</header>
+  <nav aria-label="Primary">
+    <a href="/a">A</a> <a href="/b">B</a>
+  </nav>
+  <main>
+    <h1>Primary content</h1>
+    <p>Body copy.</p>
+    <!-- A header nested in <article> is scoped OUT of banner (HTML-AAM) -->
+    <article>
+      <header>Article header — must NOT count as a second banner</header>
+      <p>Article body.</p>
+    </article>
+  </main>
+  <footer>Footer (page-level -> contentinfo landmark)</footer>
+</body>
+</html>

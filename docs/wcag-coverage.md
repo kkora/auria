@@ -14,6 +14,7 @@ what the tool proves automatically and what still needs manual verification.
 | Keyboard order walk (names/roles) | 2.4.3 Focus Order, 4.1.2 Name/Role/Value | A | tab traversal + accessible-name inference |
 | Keyboard-trap detection | 2.1.2 No Keyboard Trap | A | full-page tab cycle; flags stuck focus |
 | Heading structure / missing `h1` | 1.3.1 Info & Relationships, 2.4.6 Headings | A/AA | heading outline extraction |
+| ARIA landmark structure | 2.4.1 Bypass Blocks, 1.3.1 Info & Relationships | A | landmark region map (native + explicit roles), missing/duplicate `main`, unlabeled same-role landmarks |
 | Text under 12px (advisory) | — (readability signal, not a pass/fail SC) | — | computed `font-size` scan |
 | Dark-mode / reduced-motion audit | context for 1.4.3 etc. | AA | `prefers-color-scheme` / `prefers-reduced-motion` emulation |
 | Real NVDA announcements (`--nvda`) | evidence for 4.1.2 / 1.3.1 | A | captured screen-reader speech |

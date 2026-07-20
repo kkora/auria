@@ -41,6 +41,9 @@ test("runAudit: analysis-only run emits axe.json, md, pdf, sarif, junit", opts, 
     assert.equal(vjson.format, "VPAT-2");
     assert.equal(vjson.criteria.length, 55);
     assert.equal(vjson.criteria.find(c => c.sc === "1.1.1").conformance, "Partially Supports");
+    // landmarks: the broken fixture has no <main> -> 2.4.1 Bypass Blocks is Partially Supports
+    assert.equal(vjson.criteria.find(c => c.sc === "2.4.1").conformance, "Partially Supports");
+    assert.match(await readFile(path.join(dir, "broken-report.md"), "utf8"), /No ARIA landmark regions found/);
     // trend: first run writes a trend report (no prior) and seeds the history file
     const trend = await readFile(path.join(dir, "broken-vpat-trend.md"), "utf8");
     assert.match(trend, /First VPAT run/);

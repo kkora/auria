@@ -10,6 +10,7 @@
 //
 // Auth values are NEVER included — counts only (hard invariant).
 // Pure function: no browser, no file writes (caller decides whether to persist .md).
+import { landmarkFindings } from "../analyze/landmarks.mjs";
 
 // Describe a config setup step for the "setup steps applied first" list.
 // SECURITY: `fill`/`select` values are the login/PII channel (e.g. a password typed
@@ -91,8 +92,20 @@ export function buildMarkdown(analysis, {
     analysis.screenshots.forEach(s => md.push(`- \`${s.file}\` — ${s.viewport}, ${s.marked} element${s.marked === 1 ? "" : "s"} highlighted`));
     md.push("");
   }
-  md.push("## Headings", "", ...analysis.headings.map(h => `${"  ".repeat(h.level - 1)}- h${h.level}: ${h.text}`), "",
-    "## Keyboard order (first tab stops)", "",
+  md.push("## Headings", "", ...analysis.headings.map(h => `${"  ".repeat(h.level - 1)}- h${h.level}: ${h.text}`), "");
+  if (analysis.landmarks) {
+    const { counts, issues } = landmarkFindings(analysis.landmarks);
+    md.push("## Landmarks", "");
+    if (!analysis.landmarks.length) md.push("No ARIA landmark regions found — the page offers no `banner`/`nav`/`main`/`contentinfo` structure for assistive-technology navigation (WCAG 1.3.1 / 2.4.1). ❌", "");
+    else {
+      md.push("| Role | Accessible name | Element |", "| --- | --- | --- |",
+        ...analysis.landmarks.map(l => `| ${l.role} | ${l.label ? l.label.replace(/\|/g, "\\|") : "*(none)*"} | \`<${l.tag}>\` |`), "",
+        `Roles present: ${Object.entries(counts).filter(([, n]) => n > 0).map(([r, n]) => `${r} ×${n}`).join(", ") || "none"}.`, "");
+    }
+    if (issues.length) { md.push("**Landmark issues:**", "", ...issues.map(i => `- ${i.level === "serious" ? "❌" : "⚠"} ${i.msg}`), ""); }
+    else if (analysis.landmarks.length) md.push("No landmark-structure issues detected. ✅", "");
+  }
+  md.push("## Keyboard order (first tab stops)", "",
     analysis.nvdaUsed
       ? "| # | Simulated (approximation) | NVDA announced |"
       : "| # | Announced as |",

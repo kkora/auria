@@ -16,6 +16,7 @@ import { runLayout, readViewportMeta } from "./analyze/layout.mjs";
 import { runStrict } from "./analyze/strict.mjs";
 import { walkTabOrder, detectKeyboardTrap } from "./analyze/keyboard.mjs";
 import { readHeadings } from "./analyze/headings.mjs";
+import { readLandmarks } from "./analyze/landmarks.mjs";
 import { buildNarration } from "./narrate/plan.mjs";
 import { buildMarkdown } from "./report/markdown.mjs";
 import { renderPdf } from "./report/pdf.mjs";
@@ -94,6 +95,7 @@ export async function runAudit(job) {
       }));
       analysis.title = await page.title();
       analysis.headings = await readHeadings(page);
+      analysis.landmarks = await readLandmarks(page);
       // Collect axe's passed criteria too when a VPAT is requested, so criteria axe
       // tested-and-passed become a confident "Supports" (heavier, hence opt-in).
       const axeResult = await runAxe(page, viewports, { passes: wantVpat });

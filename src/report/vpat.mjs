@@ -8,6 +8,7 @@
 // not evaluate are marked "Not Evaluated" for a human reviewer to complete.
 //
 // Pure function: no browser, no file writes. Auth values are never included.
+import { landmarkFindings } from "../analyze/landmarks.mjs";
 
 // WCAG 2.2 Level A + AA success criteria (the Section 508 / EN 301 549 baseline).
 const WCAG = [
@@ -84,7 +85,7 @@ export function scFromTag(tag) {
 
 // Criteria Auria evaluates directly — clean = "Supports", failing = "Partially Supports"
 // (or "Does Not Support" for the hard failures handled below).
-const AURIA_EVALUATES = new Set(["1.3.1", "1.4.4", "1.4.10", "2.1.2", "2.4.2", "2.4.3", "2.4.6", "2.5.8", "4.1.2"]);
+const AURIA_EVALUATES = new Set(["1.3.1", "1.4.4", "1.4.10", "2.1.2", "2.4.1", "2.4.2", "2.4.3", "2.4.6", "2.5.8", "4.1.2"]);
 
 // Revised Section 508 — Chapter 3: Functional Performance Criteria (302.x). These are
 // outcome-based and require human judgement, so automation reports them "Not Evaluated".
@@ -155,6 +156,13 @@ function collectFindings(analysis) {
   if (unnamed) add("4.1.2", `${unnamed} focusable control(s) with no accessible name.`);
   if ((analysis.headings || []).length && !analysis.headings.some(h => h.level === 1))
     add("1.3.1", "No level-one heading (h1) — document structure is incomplete.");
+
+  // ARIA landmarks: no main -> nothing to bypass to (2.4.1); structure defects -> 1.3.1.
+  if (analysis.landmarks) {
+    const { counts, issues } = landmarkFindings(analysis.landmarks);
+    if (counts.main === 0) add("2.4.1", "No main landmark — repeated blocks of content cannot be bypassed.");
+    for (const i of issues) if (i.msg.includes("1.3.1")) add("1.3.1", i.msg);
+  }
 
   return f;
 }
