@@ -29,3 +29,7 @@ Thumbs.db
 
 # Subagent-driven-development scratch (briefs, reports, ledger)
 .superpowers/
+
+# Local demo output + docker build/run scratch logs
+out/
+.docker-*.log
