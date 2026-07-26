@@ -1,8 +1,9 @@
 {
-  "name": "auria",
+  "name": "@kora.kanchan/auria",
   "version": "0.2.0",
   "description": "Accessibility + responsive-layout auditor: URL in -> narrated video, axe/layout/keyboard reports (MD/PDF/JSON/SARIF/JUnit), VPAT/ACR compliance, and dashboards out.",
   "type": "module",
+  "publishConfig": { "access": "public" },
   "author": "kkora <kora.kanchan@gmail.com>",
   "repository": { "type": "git", "url": "git+https://github.com/kkora/auria.git" },
   "bugs": { "url": "https://github.com/kkora/auria/issues" },
